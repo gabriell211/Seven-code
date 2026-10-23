@@ -64,6 +64,8 @@ jobs:
           sdkmanager "platforms;android-36" "build-tools;36.0.0" "cmake;3.22.1" "ndk;27.2.12479018"
       - name: Build native Android workbench host APK
         run: gradle -p mobile/android :app:assembleDebug --no-daemon --stacktrace
+      - name: Verify Android package contents and native PTY architectures
+        run: node .seven/verify-android-apk.mjs
       - name: Prepare release artifact
         run: |
           mkdir -p release-assets

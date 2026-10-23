@@ -69,6 +69,8 @@ jobs:
           sdkmanager "platforms;android-36" "build-tools;36.0.0" "cmake;3.22.1" "ndk;27.2.12479018"
       - name: Compilar APK de testes (não assinado para distribuição)
         run: gradle -p mobile/android :app:assembleDebug --no-daemon --stacktrace
+      - name: Verificar DEX, manifesto e PTY nativo ARM64/x86_64 dentro do APK
+        run: node .seven/verify-android-apk.mjs
       - name: Habilitar KVM para testes reais no emulador
         run: |
           test -e /dev/kvm || { echo '::error::Hosted runner has no KVM; real emulator test cannot pass'; exit 1; }

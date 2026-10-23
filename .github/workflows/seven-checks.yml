@@ -25,6 +25,7 @@ jobs:
           node --test .seven/tests/mobile-workbench.test.mjs
           node --test .seven/tests/android-pty-process.test.mjs
           node --test .seven/tests/release-qualification.test.mjs
+          node --test .seven/tests/android-apk-package.test.mjs
           python -m py_compile .seven/render-icons.py
           if [ ! -f product.json ] || [ ! -f src/vs/workbench/workbench.desktop.main.ts ]; then
             echo "::error::A importação do Code - OSS ainda não foi concluída."
