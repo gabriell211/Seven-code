@@ -56,7 +56,7 @@ A feature catalog declarativa [feature-catalog.ts](../mobile/capabilities/featur
 
 **Comunicação com nativos:** implementar ponte para filesystem Android/iOS, seleção Files/iCloud, PTY, shell local e controle de sessão para retomada.
 
-**Gateway remoto:** criar Seven Code Server compatível com extensão Node host, terminal, LSP, DAP, Git, testes e APIs de arquivos. Usar TLS e sessão com autenticação + autorização por workspace. Nunca utilizar credenciais persistentes em mensagens WebView.
+**Gateway remoto:** cliente WebSocket e testes de handshake em `mobile/remote/` já versionados; ainda é preciso criar Seven Code Server compatível com extensão Node host, terminal, LSP, DAP, Git, testes e APIs de arquivos. Usar TLS e sessão com autenticação + autorização por workspace. Nunca utilizar credenciais persistentes em mensagens WebView.
 
 **Experiência completa:** passar cada feature catalog para estado `available` somente depois de compilar, usar e provar em E2E. Adicionar screenshots e logs nos PRs e GitHub Actions; manter matriz gerada e revisável.
 
