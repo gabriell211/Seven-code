@@ -1,0 +1,113 @@
+/* The VS Code web extension host uses the original TerminalProfileProvider API. */
+const vscode = require('vscode');
+const CHANNEL = 'seven-code-mobile-terminal-v1';
+const encoder = new TextEncoder();
+
+function encode(bytes) {
+    let raw = '';
+    for (const byte of bytes) raw += String.fromCharCode(byte);
+    return btoa(raw);
+}
+
+class SevenAndroidPty {
+    constructor() {
+        this.sessionId = crypto.randomUUID().replace(/-/g, '');
+        this.closed = false;
+        this.onDidWriteEmitter = new vscode.EventEmitter();
+        this.onDidCloseEmitter = new vscode.EventEmitter();
+        this.onDidWrite = this.onDidWriteEmitter.event;
+        this.onDidClose = this.onDidCloseEmitter.event;
+        this.decoder = new TextDecoder();
+        this.channel = new BroadcastChannel(CHANNEL);
+        this.channel.onmessage = event => {
+            const message = event.data;
+            if (!message || message.sessionId !== this.sessionId || this.closed) return;
+            if (message.type === 'data' && typeof message.value === 'string') {
+                try {
+                    const bytes = Uint8Array.from(atob(message.value), c => c.charCodeAt(0));
+                    this.onDidWriteEmitter.fire(this.decoder.decode(bytes, { stream: true }));
+                } catch {
+                    this.onDidWriteEmitter.fire('\r\n[Seven Code] Saída de terminal inválida.');
+                }
+            }
+            if (message.type === 'error') {
+                this.onDidWriteEmitter.fire('\r\n[Seven Code] ' + String(message.value || 'Erro no terminal') + '\r\n');
+            }
+            if (message.type === 'exit') {
+                this.closed = true;
+                this.onDidWriteEmitter.fire(this.decoder.decode());
+                this.onDidCloseEmitter.fire(typeof message.exitCode === 'number' ? message.exitCode : undefined);
+                this.channel.close();
+                this.onDidWriteEmitter.dispose();
+                this.onDidCloseEmitter.dispose();
+            }
+        };
+    }
+    send(message) {
+        if (!this.closed) this.channel.postMessage({ sessionId: this.sessionId, ...message });
+    }
+    open(dimensions) {
+        this.send({
+            type: 'start',
+            cols: Math.max(1, Math.min(1000, dimensions?.columns || 80)),
+            rows: Math.max(1, Math.min(1000, dimensions?.rows || 24)),
+        });
+    }
+    handleInput(data) {
+        const bytes = encoder.encode(data);
+        for (let i = 0; i < bytes.length; i += 48_000) {
+            this.send({ type: 'input', data: encode(bytes.subarray(i, i + 48_000)) });
+        }
+    }
+    setDimensions(dimensions) {
+        this.send({ type: 'resize', cols: dimensions.columns, rows: dimensions.rows });
+    }
+    close() {
+        if (this.closed) return;
+        this.send({ type: 'close' });
+        this.closed = true;
+        this.channel.close();
+        this.onDidWriteEmitter.dispose();
+        this.onDidCloseEmitter.dispose();
+    }
+}
+
+async function hasNativeHost() {
+    if (typeof BroadcastChannel === 'undefined' || vscode.env.uiKind !== vscode.UIKind.Web) {
+        return false;
+    }
+    const channel = new BroadcastChannel(CHANNEL);
+    const nonce = crypto.randomUUID();
+    return new Promise(resolve => {
+        let settled = false;
+        function finish(value) {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            channel.close();
+            resolve(value);
+        }
+        channel.onmessage = event => {
+            if (event.data?.type === 'probe-result' && event.data.nonce === nonce &&
+                event.data.platform === 'android') {
+                finish(true);
+            }
+        };
+        const timer = setTimeout(() => finish(false), 1500);
+        channel.postMessage({ type: 'probe', nonce });
+    });
+}
+
+async function activate(context) {
+    if (!(await hasNativeHost())) return;
+    context.subscriptions.push(vscode.window.registerTerminalProfileProvider('sevenCode.android.local', {
+        provideTerminalProfile() {
+            return new vscode.TerminalProfile({
+                name: 'Android • Seven Code',
+                pty: new SevenAndroidPty(),
+            });
+        },
+    }));
+}
+function deactivate() {}
+module.exports = { activate, deactivate };
