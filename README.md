@@ -2,12 +2,12 @@
 
 Editor multiplataforma baseado no [Code - OSS](https://github.com/microsoft/vscode), com marca e tema independentes.
 
-> **Estado em 23/10/2026:** fonte Code - OSS importada na `main` e identidade Seven Code aplicada. O APK Android **debug** de teste do terminal compilou no CI; **não** há ainda homologação em dispositivo real nem instaladores desktop de produção.
+> **Estado em 23/10/2026:** fonte Code - OSS importada na `main` e identidade Seven Code aplicada. A aplicação Android carrega o Code OSS Web Workbench original, com perfil de PTY nativo, e há um projeto iOS com build de simulador aprovado. A execução real do workbench e das extensões em servidor autenticado ainda requer homologação.
 
 ## Plataformas
 
 - **Windows, Linux e macOS:** distribuição desktop baseada no Electron do Code - OSS, após importar, compilar e assinar os artefatos.
-- **Android e iOS:** edição pela interface web/PWA hospedada em servidor autenticado. **Não** é possível rodar o Electron desktop como APK. Execução de código e terminais exigem ambiente remoto apropriado.
+- **Android e iOS:** aplicativos nativos WebView/WKWebView para acessar o **mesmo web workbench Code OSS** por HTTPS autenticado, sem redesenhar o editor. Extensões browser rodam no web extension host e extensões Node.js precisam de um host de workspace remoto. O terminal Android tem PTY nativo; o iOS usa terminal remoto enquanto o adaptador local não estiver integrado.
 
 ## Fonte original e licença
 
@@ -24,12 +24,12 @@ Origem: [microsoft/vscode](https://github.com/microsoft/vscode). O núcleo Code 
 
 ## Terminal no celular e acesso da IA
 
-- **Android:** `mobile/android` contém um host de teste com xterm.js e shell local PTY. O usuário pode interagir com o shell no próprio dispositivo; não é um PowerShell.
-- **iOS:** `mobile/ios` contém um adaptador `ios_system` para comandos locais compatíveis. É necessário criar e integrar o aplicativo Xcode.
+- **Android:** `mobile/android` abre o Code OSS Web Workbench hospedado via HTTPS. A extensão interna `extensions/seven-code-mobile-terminal` oferece o terminal local PTY dentro do painel original do Code OSS; o host exige autorização nativa por sessão.
+- **iOS:** `mobile/ios/project.yml` e `mobile/ios/App` contêm o aplicativo SwiftUI compilável para simulador, hospedando o workbench web. O adaptador experimental `ios_system` existe, mas não foi associado ao target iOS.
 - **IA:** `mobile/terminal-core/ai-terminal-tool.ts` implementa o contrato `execute_command`. No Android, **todo comando proposto exige aprovação visível na interface nativa** antes de ser executado em uma sessão separada do terminal do usuário.
-- **Limitações:** a camada que conecta um provedor de IA ao contrato, a integração de todo o editor Code - OSS e o build homologado dos aplicativos móveis ainda não foram concluídos. Veja [arquitetura do terminal](docs/AI-TERMINAL.md).
+- **Limitações:** a conexão de um provedor de IA e a homologação completa de workbench, backend remoto e extensões ainda não foram concluídas. Veja [arquitetura do terminal](docs/AI-TERMINAL.md).
 
-Build Android de teste: a workflow `seven-mobile-android.yml` validou o TypeScript e gerou `SevenCode-android-debug-apk` na [execução aprovada de 23/10/2026](https://github.com/gabriell211/Seven-code/actions/runs/39932553094). O artefato é de depuração, não um APK de produção ou um aplicativo mobile completo.
+Os workflows `seven-mobile-android.yml` e `seven-ios.yml` geram builds de depuração do host Android e do app de simulador iOS. **O APK precisa de um servidor Code OSS Web HTTPS configurado para carregar o editor e suas extensões.** Veja [instruções de instalação e extensões](docs/MOBILE.md).
 
 ## Compatibilidade de recursos no celular
 
