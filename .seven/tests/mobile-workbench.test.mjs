@@ -128,3 +128,24 @@ test('PTY forwards terminal input/resize to native and streams UTF-8 output', as
     pty.close();
     app.host.close();
 });
+
+
+test('Copilot and GitHub authentication still use upstream Code OSS extension hosts', () => {
+    const copilot = JSON.parse(readFileSync(
+        join(process.cwd(), 'extensions/copilot/package.json'), 'utf8'
+    ));
+    const auth = JSON.parse(readFileSync(
+        join(process.cwd(), 'extensions/github-authentication/package.json'), 'utf8'
+    ));
+    const browserHost = readFileSync(
+        join(process.cwd(), 'src/vs/workbench/services/extensions/browser/extensionService.ts'), 'utf8'
+    );
+    assert.equal(copilot.name, 'copilot-chat');
+    assert.equal(copilot.publisher, 'GitHub');
+    assert.equal(typeof copilot.main, 'string');
+    assert.equal(copilot.browser, undefined, 'Copilot is not a Web Worker extension and needs a compatible Node extension host');
+    assert.equal(auth.name, 'github-authentication');
+    assert.equal(typeof auth.browser, 'string', 'GitHub login still has a browser extension entrypoint');
+    assert.match(browserHost, /RemoteExtensions|RemoteExtensionHost|RemoteRunningLocation|RemoteAgentService/);
+    assert.equal(packageJson.name, 'seven-code-mobile-terminal', 'Mobile must only replace the terminal adapter');
+});
