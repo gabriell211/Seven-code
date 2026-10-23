@@ -139,11 +139,12 @@ class MainActivity : Activity() {
         }
         webView.webViewClient = object : WebViewClient() {
             override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
-                // A replaced document cannot own the previous workbench's sessions.
-                closeWorkbenchTerminals()
+                // An event from an abandoned WebView cannot terminate the new PTY.
+                if (workbenchActive && view === webView) closeWorkbenchTerminals()
             }
 
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+                if (!workbenchActive || view !== webView) return true
                 if (!request.isForMainFrame) return false
                 val uri = request.url
                 val port = if (uri.port == -1 || uri.port == 443) "" else ":" + uri.port
@@ -166,7 +167,7 @@ class MainActivity : Activity() {
             override fun onReceivedError(
                 view: WebView, request: WebResourceRequest, error: WebResourceError
             ) {
-                if (request.isForMainFrame) {
+                if (workbenchActive && view === webView && request.isForMainFrame) {
                     promptServerFailure("Falha ao conectar: " + error.description.toString().take(200))
                 }
             }
@@ -174,7 +175,8 @@ class MainActivity : Activity() {
             override fun onReceivedHttpError(
                 view: WebView, request: WebResourceRequest, errorResponse: WebResourceResponse
             ) {
-                if (request.isForMainFrame && errorResponse.statusCode in listOf(401, 403)) {
+                if (workbenchActive && view === webView &&
+                    request.isForMainFrame && errorResponse.statusCode in listOf(401, 403)) {
                     promptServerFailure("Acesso negado (HTTP " + errorResponse.statusCode +
                         "). Verifique a autenticação e as permissões no servidor Code OSS.")
                 }
