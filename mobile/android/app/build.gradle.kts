@@ -23,7 +23,6 @@ android {
         }
     }
 
-    kotlinOptions { jvmTarget = "17" }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -33,4 +32,10 @@ android {
 dependencies {
     implementation(project(":terminal"))
     implementation("androidx.webkit:webkit:1.15.0")
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+    }
 }
