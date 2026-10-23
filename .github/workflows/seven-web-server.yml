@@ -1,0 +1,64 @@
+name: Seven Code Complete Web Server Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/seven-web-server.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: seven-code-full-server-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  server:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      NODE_OPTIONS: --max-old-space-size=6144
+      VSCODE_QUALITY: oss
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - name: Install native build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libsecret-1-dev libkrb5-dev libx11-dev libxkbfile-dev libnotify-dev libnss3-dev libatk-bridge2.0-dev libasound2-dev libgbm-dev
+      - name: Install Code OSS upstream dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Package full upstream web server with web workbench and extension host
+        run: npm run gulp vscode-reh-web-linux-x64-min
+      - name: Verify compiled production editor and extension hosts
+        run: |
+          set -euo pipefail
+          root="../vscode-reh-web-linux-x64"
+          test -d "$root"
+          test -s "$root/out/server-main.js"
+          test -s "$root/out/vs/code/browser/workbench/workbench.js"
+          test -d "$root/extensions"
+          test -d "$root/node_modules"
+          test -x "$root/bin/seven-code-server"
+          find "$root" -maxdepth 3 -type f -name '*extensionHost*' | head -10
+          du -sh "$root"
+          test "$(du -sm "$root" | cut -f1)" -ge 30
+          "$root/bin/seven-code-server" --help > /tmp/seven-server-help.txt
+          head -60 /tmp/seven-server-help.txt
+      - name: Compress full compiled server
+        run: |
+          tar -C .. -czf "$RUNNER_TEMP/SevenCode-Server-Web-linux-x64.tar.gz" vscode-reh-web-linux-x64
+          test "$(stat -c %s "$RUNNER_TEMP/SevenCode-Server-Web-linux-x64.tar.gz")" -ge 15000000
+          sha256sum "$RUNNER_TEMP/SevenCode-Server-Web-linux-x64.tar.gz"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SevenCode-Server-Web-linux-x64
+          path: ${{ runner.temp }}/SevenCode-Server-Web-linux-x64.tar.gz
+          if-no-files-found: error
+          retention-days: 14
