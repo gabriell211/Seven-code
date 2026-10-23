@@ -1,105 +1,18 @@
-name: Seven Code Alpha Release
+# Legacy Alpha 1 publishing is retired to prevent unverified mobile releases.
+# Historical tags/releases are unchanged. Mobile distributions must use a
+# new workflow with signed artifacts and proven end-to-end qualification.
+name: Seven Code Legacy Alpha 1 (retired)
 
 on:
-  push:
-    branches:
-      - release/v0.1.0-alpha.1
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  android:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 70
+  retired:
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "24"
-      - name: Check terminal and mobile features
-        run: |
-          node --test .seven/tests/mobile-workbench.test.mjs
-          node --experimental-strip-types --test mobile/capabilities/capability-resolver.test.mjs
-          node --experimental-strip-types --test mobile/remote/seven-workspace-client.test.mjs
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
-      - uses: android-actions/setup-android@v4
-        with:
-          packages: 'platform-tools'
-      - uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: "8.13"
-      - name: Android toolchains
-        run: |
-          yes | sdkmanager --licenses > /dev/null || true
-          sdkmanager "platforms;android-36" "build-tools;36.0.0" "cmake;3.22.1" "ndk;27.2.12479018"
-      - name: Build native Android workbench host APK
-        run: gradle -p mobile/android :app:assembleDebug --no-daemon --stacktrace
-      - name: Prepare release artifact
-        run: |
-          mkdir -p release-assets
-          cp mobile/android/app/build/outputs/apk/debug/app-debug.apk release-assets/SevenCode-v0.1.0-alpha.1-Android-debug.apk
-      - uses: actions/upload-artifact@v4
-        with:
-          name: SevenCode-Android-Alpha
-          path: release-assets/*.apk
-          if-no-files-found: error
-
-  ios:
-    runs-on: macos-15
-    timeout-minutes: 45
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install XcodeGen
-        run: brew install xcodegen
-      - name: Generate Xcode project
-        run: xcodegen generate --spec mobile/ios/project.yml --project mobile/ios
-      - name: Compile iOS simulator host
-        run: |
-          xcodebuild -project mobile/ios/SevenCode.xcodeproj \
-            -scheme SevenCode -configuration Debug \
-            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
-            -derivedDataPath "$RUNNER_TEMP/seven-code-ios" \
-            CODE_SIGNING_ALLOWED=NO build
-      - name: Package simulator app
-        run: |
-          mkdir -p release-assets
-          ditto -c -k --sequesterRsrc --keepParent \
-            "$RUNNER_TEMP/seven-code-ios/Build/Products/Debug-iphonesimulator/SevenCode.app" \
-            release-assets/SevenCode-v0.1.0-alpha.1-iOS-Simulator.zip
-      - uses: actions/upload-artifact@v4
-        with:
-          name: SevenCode-iOS-Alpha
-          path: release-assets/*.zip
-          if-no-files-found: error
-
-  release:
-    needs: [android, ios]
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: SevenCode-*-Alpha
-          merge-multiple: true
-          path: release-assets
-      - name: Generate checksums
-        run: |
-          cd release-assets
-          sha256sum *.apk *.zip > SHA256SUMS.txt
-      - name: Publish verified prerelease
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          if gh release view v0.1.0-alpha.1 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "Release already exists; refusing to overwrite its assets."
-            exit 1
-          fi
-          gh release create v0.1.0-alpha.1 release-assets/* \
-            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
-            --title "Seven Code v0.1.0-alpha.1 — Android/iOS Workbench (preview)" \
-            --notes-file docs/RELEASE-ALPHA.md \
-            --prerelease --latest=false
+      - run: |
+          echo "::error::Legacy release route disabled: use verified release qualification."
+          exit 1
