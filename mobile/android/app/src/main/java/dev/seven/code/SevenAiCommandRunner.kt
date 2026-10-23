@@ -91,10 +91,11 @@ class SevenAiCommandRunner(
                 return
             }
 
-            if (transcript.size() < 131072) {
-                transcript.write(chunk, 0, minOf(chunk.size, 131072 - transcript.size()))
-                if (chunk.size + transcript.size() > 131072) truncated = true
-            } else truncated = true
+            val remaining = 131072 - transcript.size()
+            if (remaining > 0) {
+                transcript.write(chunk, 0, minOf(chunk.size, remaining))
+            }
+            if (chunk.size > remaining) truncated = true
 
             // Maintain a rolling suffix for the marker even when output is truncated.
             probe.write(chunk)

@@ -46,7 +46,10 @@ export class SevenCommandTool {
   private readonly pending = new Map<string, Pending>();
   private disposed = false;
 
-  constructor(private readonly transport: NativeTerminalTransport) {}
+  private readonly transport: NativeTerminalTransport;
+  constructor(transport: NativeTerminalTransport) {
+    this.transport = transport;
+  }
 
   executeCommand(request: CommandToolRequest): Promise<CommandToolResult> {
     if (this.disposed) return Promise.reject(new Error('Terminal tool disposed'));

@@ -78,7 +78,11 @@ viewport?.addEventListener('resize', resize);
 window.addEventListener('resize', resize);
 document.querySelectorAll<HTMLButtonElement>('button[data-key]').forEach(button => {
   button.addEventListener('click', () => {
-    const key = button.dataset.key;
+    const shortcuts: Record<string, string> = {
+      esc: '\\x1b', tab: '\\t', ctrlc: '\\x03',
+      up: '\\x1b[A', down: '\\x1b[B', left: '\\x1b[D', right: '\\x1b[C'
+    };
+    const key = shortcuts[button.dataset.key ?? ''];
     if (key) send({type:'input', data:b64(encoder.encode(key))});
     term.focus();
   });
