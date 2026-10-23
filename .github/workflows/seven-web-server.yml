@@ -45,8 +45,10 @@ jobs:
         run: |
           npm run gulp compile-web
           npm run gulp vscode-reh-web-linux-x64-min
-      - name: Install Chromium for real Code OSS web workbench test
-        run: npx playwright install --with-deps chromium
+      - name: Install the exact Chromium revision expected by pinned playwright-core
+        run: |
+          node node_modules/playwright-core/cli.js install --with-deps chromium
+          node -e "const fs = require('node:fs'); const { chromium } = require('playwright-core'); const p = chromium.executablePath(); if (!fs.existsSync(p)) { throw new Error('Playwright browser revision missing: ' + p); } console.log('Verified Chromium executable:', p)"
       - name: Verify compiled production editor and extension hosts
         env:
           SEVEN_CODE_BROWSER_E2E: "1"
