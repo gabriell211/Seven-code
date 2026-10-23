@@ -5,125 +5,209 @@ import android.app.AlertDialog
 import android.net.Uri
 import android.os.Bundle
 import android.util.Base64
+import android.view.ViewGroup
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
+import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.Button
+import android.widget.EditText
+import android.widget.LinearLayout
 import android.widget.TextView
-import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import dev.seven.code.terminal.SevenPty
 import org.json.JSONObject
-import java.io.ByteArrayInputStream
 import java.io.IOException
+import java.io.ByteArrayInputStream
 
 /**
- * Host Android do terminal LOCAL. A página WebView é empacotada no APK:
- * páginas remotas, iframes externos e acesso a arquivos do dispositivo são bloqueados.
+ * Host for the unmodified Code OSS web workbench, served over authenticated HTTPS.
+ * The mobile-only addition is the native terminal bridge. No fake editor UI is used.
  */
 class MainActivity : Activity() {
-    private val origin = "https://appassets.androidplatform.net"
     private lateinit var webView: WebView
-    private var session: SevenPty? = null
+    private val sessions = mutableMapOf<String, SevenPty>()
+    private var trustedOrigin: String = ""
     private var aiRunner: SevenAiCommandRunner? = null
     private var aiRequestId: String? = null
+    private val sessionPattern = Regex("[A-Za-z0-9_-]{1,64}")
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val savedUrl = getPreferences(MODE_PRIVATE).getString("workbenchUrl", null)
+        if (savedUrl == null || parseWorkbenchUrl(savedUrl) == null) {
+            showServerSetup()
+        } else {
+            openWorkbench(savedUrl)
+        }
+    }
 
+    private fun parseWorkbenchUrl(raw: String): Pair<String, String>? {
+        val uri = Uri.parse(raw.trim())
+        if (uri.scheme != "https" || uri.host.isNullOrBlank() || uri.userInfo != null ||
+            uri.fragment != null || uri.port > 65535 || uri.port == 0) return null
+        if (uri.host!!.contains("..")) return null
+        val host = uri.host!!.lowercase()
+        val port = if (uri.port == -1 || uri.port == 443) "" else ":" + uri.port
+        return "https://" + host + port to uri.toString()
+    }
+
+    private fun showServerSetup(error: String? = null) {
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            val pad = (24 * resources.displayMetrics.density).toInt()
+            setPadding(pad, pad, pad, pad)
+        }
+        layout.addView(TextView(this).apply {
+            text = "Seven Code — Code OSS\n\nInforme o endereço HTTPS do seu servidor Seven Code Web. " +
+                "O editor completo e as extensões carregam desse servidor; o terminal Android é nativo."
+            textSize = 18f
+        })
+        if (error != null) layout.addView(TextView(this).apply { text = error })
+        val field = EditText(this).apply {
+            hint = "https://code.exemplo.com"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                android.text.InputType.TYPE_TEXT_VARIATION_URI
+            setSingleLine(true)
+        }
+        layout.addView(field)
+        layout.addView(Button(this).apply {
+            text = "Abrir editor"
+            setOnClickListener {
+                val candidate = field.text.toString().trim()
+                if (parseWorkbenchUrl(candidate) == null) {
+                    field.error = "Informe uma URL HTTPS válida e sem credenciais na URL"
+                    return@setOnClickListener
+                }
+                AlertDialog.Builder(this@MainActivity)
+                    .setTitle("Confiar neste servidor?")
+                    .setMessage("O servidor escolhido terá acesso à interface do editor. " +
+                        "O terminal Android solicitará aprovação separada antes de abrir cada sessão.\n\n" + candidate)
+                    .setNegativeButton("Cancelar", null)
+                    .setPositiveButton("Confiar e abrir") { _, _ ->
+                        getPreferences(MODE_PRIVATE).edit().putString("workbenchUrl", candidate).apply()
+                        openWorkbench(candidate)
+                    }.show()
+            }
+        })
+        setContentView(layout)
+    }
+
+    private fun openWorkbench(url: String) {
+        val parsed = parseWorkbenchUrl(url) ?: return showServerSetup("URL inválida")
+        trustedOrigin = parsed.first
         if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
             setContentView(TextView(this).apply {
-                text = "Seven Code precisa de Android System WebView atualizado."
+                text = "Atualize o Android System WebView para usar o Seven Code."
             })
             return
         }
-
-        val loader = WebViewAssetLoader.Builder()
-            .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this))
-            .build()
         webView = WebView(this)
         webView.settings.apply {
             javaScriptEnabled = true
+            domStorageEnabled = true
             allowFileAccess = false
             allowContentAccess = false
             javaScriptCanOpenWindowsAutomatically = false
             setSupportMultipleWindows(false)
-            blockNetworkLoads = true
-            domStorageEnabled = false
+            mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+            safeBrowsingEnabled = true
         }
         webView.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
-                return !isLocalAsset(request.url)
+                if (!request.isForMainFrame) return false
+                val uri = request.url
+                val port = if (uri.port == -1 || uri.port == 443) "" else ":" + uri.port
+                val requestedOrigin = uri.scheme + "://" + (uri.host ?: "").lowercase() + port
+                return requestedOrigin != trustedOrigin || uri.userInfo != null
             }
-
-            override fun shouldInterceptRequest(
-                view: WebView,
-                request: WebResourceRequest
-            ): WebResourceResponse? {
-                if (!isLocalAsset(request.url)) {
-                    return WebResourceResponse(
-                        "text/plain", "UTF-8", 403, "Forbidden",
-                        emptyMap(), ByteArrayInputStream(ByteArray(0))
-                    )
-                }
-                return loader.shouldInterceptRequest(request.url)
+            override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
+                if (request.url.scheme == "http") return WebResourceResponse(
+                    "text/plain", "UTF-8", 403, "Blocked insecure request",
+                    emptyMap(), ByteArrayInputStream(ByteArray(0))
+                )
+                return null
             }
         }
         WebViewCompat.addWebMessageListener(
-            webView, "SevenTerminalNative", setOf(origin)
+            webView, "SevenTerminalNative", setOf(trustedOrigin)
         ) { _, message, sourceOrigin, isMainFrame, _ ->
-            if (!isMainFrame || sourceOrigin.toString() != origin) return@addWebMessageListener
+            if (!isMainFrame || sourceOrigin.toString() != trustedOrigin) return@addWebMessageListener
             val raw = message.data ?: return@addWebMessageListener
             if (raw.length > 100_000) return@addWebMessageListener
             runOnUiThread { handleMessage(raw) }
         }
         setContentView(webView)
-        webView.loadUrl("$origin/assets/index.html")
+        webView.loadUrl(parsed.second)
     }
 
-    private fun isLocalAsset(uri: Uri): Boolean =
-        uri.scheme == "https" &&
-            uri.host == "appassets.androidplatform.net" &&
-            (uri.port == -1 || uri.port == 443) &&
-            (uri.path?.startsWith("/assets/") == true) &&
-            uri.userInfo == null
+    private fun sendEvent(type: String, sessionId: String, value: String? = null, exitCode: Int? = null) {
+        val message = JSONObject().put("type", type).put("sessionId", sessionId)
+        if (value != null) message.put("value", value)
+        if (type == "exit") message.put("exitCode", exitCode ?: JSONObject.NULL)
+        sendPayload(message)
+    }
 
     private fun handleMessage(raw: String) {
         try {
-            val message = JSONObject(raw)
-            when (message.optString("type")) {
+            val data = JSONObject(raw)
+            if (data.optString("type") == "ai-propose") {
+                proposeAiCommand(data)
+                return
+            }
+            val sessionId = data.optString("sessionId")
+            if (!sessionPattern.matches(sessionId)) return
+            when (data.optString("type")) {
                 "start" -> {
-                    if (session != null) return
-                    val cols = message.optInt("cols")
-                    val rows = message.optInt("rows")
-                    val next = SevenPty(
-                        this,
-                        onData = { sendEvent("data", Base64.encodeToString(it, Base64.NO_WRAP)) },
-                        onError = { sendEvent("error", it.message ?: "Falha no shell") },
-                        onExit = { sendEvent("exit", it?.toString() ?: "Sessão encerrada") }
-                    )
-                    next.start(cols, rows)
-                    session = next
+                    if (sessions.containsKey(sessionId)) return
+                    val cols = data.optInt("cols")
+                    val rows = data.optInt("rows")
+                    if (cols !in 1..1000 || rows !in 1..1000) return
+                    AlertDialog.Builder(this)
+                        .setTitle("Abrir terminal Android?")
+                        .setMessage("Autorizar sessão do shell local /system/bin/sh? " +
+                            "Os comandos executarão com as permissões do Seven Code no Android.")
+                        .setNegativeButton("Negar") { _, _ ->
+                            sendEvent("error", sessionId, "Terminal negado pelo usuário")
+                            sendEvent("exit", sessionId)
+                        }
+                        .setPositiveButton("Abrir terminal") { _, _ ->
+                            try {
+                                val pty = SevenPty(this,
+                                    onData = { bytes ->
+                                        sendEvent("data", sessionId, Base64.encodeToString(bytes, Base64.NO_WRAP))
+                                    },
+                                    onError = { error -> sendEvent("error", sessionId, error.message ?: "Erro PTY") },
+                                    onExit = { code ->
+                                        runOnUiThread {
+                                            sessions.remove(sessionId)
+                                            sendEvent("exit", sessionId, exitCode = code)
+                                        }
+                                    }
+                                )
+                                pty.start(cols, rows)
+                                sessions[sessionId] = pty
+                            } catch (error: Exception) {
+                                sendEvent("error", sessionId, error.message ?: "Falha ao abrir shell")
+                                sendEvent("exit", sessionId)
+                            }
+                        }.show()
                 }
                 "input" -> {
-                    val encoded = message.optString("data")
+                    val encoded = data.optString("data")
                     if (encoded.length > 90_000) return
                     val bytes = Base64.decode(encoded, Base64.NO_WRAP)
-                    session?.write(bytes)
+                    if (bytes.size <= 65_536) sessions[sessionId]?.write(bytes)
                 }
-                "resize" -> session?.resize(message.optInt("cols"), message.optInt("rows"))
-                "ai-propose" -> proposeAiCommand(message)
-                "close" -> {
-                    session?.close()
-                    session = null
-                }
+                "resize" -> sessions[sessionId]?.resize(data.optInt("cols"), data.optInt("rows"))
+                "close" -> sessions.remove(sessionId)?.close()
             }
-        } catch (ex: Exception) {
-            sendEvent("error", ex.message ?: "Mensagem inválida")
+        } catch (error: Exception) {
+            // A malformed web message must not crash the Android workbench.
         }
     }
-
 
     /**
      * Only the native host can approve executing an AI-proposed command.
@@ -209,8 +293,8 @@ class MainActivity : Activity() {
     override fun onDestroy() {
         aiRunner?.cancel()
         aiRunner = null
-        session?.close()
-        session = null
+        sessions.values.toList().forEach { it.close() }
+        sessions.clear()
         if (::webView.isInitialized) webView.destroy()
         super.onDestroy()
     }
