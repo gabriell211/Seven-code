@@ -5,10 +5,20 @@ on:
     branches: [main, "release/**"]
     paths:
       - "mobile/**"
+      - ".seven/tests/android-pty-process.test.mjs"
+      - ".seven/tests/mobile-workbench.test.mjs"
+      - "src/vs/workbench/contrib/terminal/browser/sevenAndroidTerminalProcess.ts"
+      - "src/vs/workbench/contrib/terminal/browser/terminalService.ts"
+      - "src/vs/workbench/browser/sevenMobileTerminalBridge.ts"
       - ".github/workflows/seven-mobile-android.yml"
   pull_request:
     paths:
       - "mobile/**"
+      - ".seven/tests/android-pty-process.test.mjs"
+      - ".seven/tests/mobile-workbench.test.mjs"
+      - "src/vs/workbench/contrib/terminal/browser/sevenAndroidTerminalProcess.ts"
+      - "src/vs/workbench/contrib/terminal/browser/terminalService.ts"
+      - "src/vs/workbench/browser/sevenMobileTerminalBridge.ts"
       - ".github/workflows/seven-mobile-android.yml"
   workflow_dispatch:
 
@@ -32,8 +42,9 @@ jobs:
         run: node --experimental-strip-types --test mobile/terminal-core/ai-terminal-tool.test.mjs
       - name: Verificar todas as áreas do editor móvel
         run: node --experimental-strip-types --test mobile/capabilities/capability-resolver.test.mjs
-      - name: Testar cliente de workspace remoto seguro
-        run: node --experimental-strip-types --test mobile/remote/seven-workspace-client.test.mjs
+      - name: Testar cliente de workspace remoto e PTY do Code OSS
+        run: |
+          node --experimental-strip-types --test mobile/remote/seven-workspace-client.test.mjs
           node --test .seven/tests/mobile-workbench.test.mjs
           node --test .seven/tests/android-pty-process.test.mjs
       - name: Construir interface xterm.js

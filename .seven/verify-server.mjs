@@ -82,6 +82,34 @@ try {
 		assert.equal(response.status, 200, `Packaged resource must be served: ${resource}`);
 		assert.ok((await response.arrayBuffer()).byteLength > 0);
 	}
+
+	// Browser-level smoke test executes the compiled workbench JavaScript and
+	// connects through the authenticated Code OSS server. HTTP 200 alone is
+	// insufficient to prove that a real editor can render.
+	if (process.env.SEVEN_CODE_BROWSER_E2E === '1') {
+		const { chromium } = await import('playwright-core');
+		const browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });
+		try {
+			const context = await browser.newContext();
+			await context.addCookies([{ name: 'vscode-tkn', value: token, url: base + '/' }]);
+			const page = await context.newPage();
+			const errors = [];
+			page.on('pageerror', error => errors.push(error.message));
+			const response = await page.goto(base + '/', { waitUntil: 'domcontentloaded', timeout: 60_000 });
+			assert.equal(response?.status(), 200, 'Authenticated real browser must load Code OSS page');
+			await page.locator('.monaco-workbench').waitFor({ state: 'visible', timeout: 90_000 });
+			await page.locator('.monaco-workbench .part.editor').waitFor({ state: 'attached', timeout: 60_000 });
+			assert.equal(await page.locator('.monaco-workbench').count(), 1,
+				'Original Code OSS workbench must initialize once');
+			assert.equal(errors.length, 0,
+				'Runtime errors in compiled editor: ' + errors.slice(0, 5).join(' | '));
+			console.log('Authenticated Chromium loaded the compiled Code OSS workbench and editor part.');
+			await context.close();
+		} finally {
+			await browser.close();
+		}
+	}
+
 	console.log('Verified server startup, commit, authentication, workbench and packaged extension hosts.');
 } catch (error) {
 	console.error(output.replaceAll(token, '<redacted>'));

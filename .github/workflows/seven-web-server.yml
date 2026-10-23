@@ -45,7 +45,11 @@ jobs:
         run: |
           npm run gulp compile-web
           npm run gulp vscode-reh-web-linux-x64-min
+      - name: Install Chromium for real Code OSS web workbench test
+        run: npx playwright install --with-deps chromium
       - name: Verify compiled production editor and extension hosts
+        env:
+          SEVEN_CODE_BROWSER_E2E: "1"
         run: |
           set -euo pipefail
           root="../vscode-reh-web-linux-x64"
