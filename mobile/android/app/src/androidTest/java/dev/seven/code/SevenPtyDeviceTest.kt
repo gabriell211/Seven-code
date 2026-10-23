@@ -1,5 +1,11 @@
 package dev.seven.code
 
+import android.content.Context
+import android.view.ViewGroup
+import android.widget.Button
+import android.widget.EditText
+import android.widget.LinearLayout
+import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.seven.code.terminal.SevenPty
@@ -21,6 +27,25 @@ import java.util.concurrent.atomic.AtomicReference
  */
 @RunWith(AndroidJUnit4::class)
 class SevenPtyDeviceTest {
+    @Test
+    fun appStartsAndRejectsNonHttpsWorkbench() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        context.getSharedPreferences("MainActivity", Context.MODE_PRIVATE)
+            .edit().remove("workbenchUrl").commit()
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            scenario.onActivity { activity ->
+                val root = activity.findViewById<ViewGroup>(android.R.id.content)
+                val layout = root.getChildAt(0) as LinearLayout
+                val widgets = (0 until layout.childCount).map { layout.getChildAt(it) }
+                val field = widgets.filterIsInstance<EditText>().single()
+                val button = widgets.filterIsInstance<Button>().single()
+                field.setText("http://unsafe.example")
+                button.performClick()
+                assertTrue("HTTP workbench must be rejected", field.error != null)
+            }
+        }
+    }
+
     @Test
     fun nativePtyRunsShellCommandAndStreamsOutput() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext

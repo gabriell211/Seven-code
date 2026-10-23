@@ -2,11 +2,14 @@ package dev.seven.code
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.content.ActivityNotFoundException
+import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Bundle
 import android.util.Base64
 import android.view.ViewGroup
+import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
@@ -36,6 +39,7 @@ class MainActivity : Activity() {
     private var aiRunner: SevenAiCommandRunner? = null
     private var aiRequestId: String? = null
     private val sessionPattern = Regex("[A-Za-z0-9_-]{1,64}")
+    private var showingConnectionError = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -74,6 +78,7 @@ class MainActivity : Activity() {
             inputType = android.text.InputType.TYPE_CLASS_TEXT or
                 android.text.InputType.TYPE_TEXT_VARIATION_URI
             setSingleLine(true)
+            setText(getPreferences(MODE_PRIVATE).getString("workbenchUrl", "") ?: "")
         }
         layout.addView(field)
         layout.addView(Button(this).apply {
@@ -107,6 +112,8 @@ class MainActivity : Activity() {
             })
             return
         }
+        // Do not retain a disconnected WebView when changing the trusted server.
+        val previousWebView = if (::webView.isInitialized) webView else null
         webView = WebView(this)
         webView.settings.apply {
             javaScriptEnabled = true
@@ -129,8 +136,38 @@ class MainActivity : Activity() {
                 val uri = request.url
                 val port = if (uri.port == -1 || uri.port == 443) "" else ":" + uri.port
                 val requestedOrigin = uri.scheme + "://" + (uri.host ?: "").lowercase() + port
-                return requestedOrigin != trustedOrigin || uri.userInfo != null
+                if (requestedOrigin == trustedOrigin && uri.userInfo == null) return false
+                // OAuth providers prohibit login in embedded webviews. Only
+                // deliberate HTTPS navigations can leave this trusted origin.
+                if (request.hasGesture() && uri.scheme == "https" &&
+                    !uri.host.isNullOrBlank() && uri.userInfo == null) {
+                    val intent = Intent(Intent.ACTION_VIEW, uri).addCategory(Intent.CATEGORY_BROWSABLE)
+                    try {
+                        startActivity(intent)
+                    } catch (_: ActivityNotFoundException) {
+                        promptServerFailure("Não há navegador disponível para abrir o login externo.")
+                    }
+                }
+                return true
             }
+
+            override fun onReceivedError(
+                view: WebView, request: WebResourceRequest, error: WebResourceError
+            ) {
+                if (request.isForMainFrame) {
+                    promptServerFailure("Falha ao conectar: " + error.description.toString().take(200))
+                }
+            }
+
+            override fun onReceivedHttpError(
+                view: WebView, request: WebResourceRequest, errorResponse: WebResourceResponse
+            ) {
+                if (request.isForMainFrame && errorResponse.statusCode in listOf(401, 403)) {
+                    promptServerFailure("Acesso negado (HTTP " + errorResponse.statusCode +
+                        "). Verifique a autenticação e as permissões no servidor Code OSS.")
+                }
+            }
+
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
                 if (request.url.scheme == "http") return WebResourceResponse(
                     "text/plain", "UTF-8", 403, "Blocked insecure request",
@@ -148,7 +185,26 @@ class MainActivity : Activity() {
             runOnUiThread { handleMessage(raw) }
         }
         setContentView(webView)
+        previousWebView?.stopLoading()
+        previousWebView?.destroy()
+        showingConnectionError = false
         webView.loadUrl(parsed.second)
+    }
+
+    private fun promptServerFailure(reason: String) {
+        if (showingConnectionError || isFinishing || isDestroyed) return
+        showingConnectionError = true
+        AlertDialog.Builder(this)
+            .setTitle("Não foi possível abrir o Seven Code")
+            .setMessage(reason + "\\n\\nO aplicativo precisa do servidor Code OSS original " +
+                "em uma conexão HTTPS autenticada.")
+            .setPositiveButton("Tentar novamente") { _, _ ->
+                if (::webView.isInitialized) webView.reload()
+            }
+            .setNeutralButton("Alterar servidor") { _, _ -> showServerSetup(reason) }
+            .setNegativeButton("Cancelar", null)
+            .setOnDismissListener { showingConnectionError = false }
+            .show()
     }
 
     private fun sendEvent(type: String, sessionId: String, value: String? = null, exitCode: Int? = null) {
