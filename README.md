@@ -21,3 +21,12 @@ Origem: [microsoft/vscode](https://github.com/microsoft/vscode). O núcleo Code 
 - `docs/MOBILE.md`: estratégia de uso no celular.
 
 **Importante:** uma execução bem-sucedida do workflow de importação não equivale a uma build de produção. Builds, instaladores, CI multiplataforma e homologação são etapas distintas.
+
+## Terminal no celular e acesso da IA
+
+- **Android:** `mobile/android` contém um host de teste com xterm.js e shell local PTY. O usuário pode interagir com o shell no próprio dispositivo; não é um PowerShell.
+- **iOS:** `mobile/ios` contém um adaptador `ios_system` para comandos locais compatíveis. É necessário criar e integrar o aplicativo Xcode.
+- **IA:** `mobile/terminal-core/ai-terminal-tool.ts` implementa o contrato `execute_command`. No Android, **todo comando proposto exige aprovação visível na interface nativa** antes de ser executado em uma sessão separada do terminal do usuário.
+- **Limitações:** a camada que conecta um provedor de IA ao contrato, a integração de todo o editor Code - OSS e o build homologado dos aplicativos móveis ainda não foram concluídos. Veja [arquitetura do terminal](docs/AI-TERMINAL.md).
+
+Build de teste Android: a workflow `seven-mobile-android.yml` valida o TypeScript e tenta gerar `SevenCode-android-debug-apk` como artefato do GitHub Actions. A execução da workflow deve ser conferida antes de declarar o APK funcional.
