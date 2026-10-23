@@ -18,7 +18,7 @@ concurrency:
 jobs:
   importar:
     if: github.repository == 'gabriell211/Seven-code'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
