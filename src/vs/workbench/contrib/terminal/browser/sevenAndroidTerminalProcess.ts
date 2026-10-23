@@ -98,11 +98,6 @@ export class SevenAndroidTerminalProcess extends Disposable implements ITerminal
 				}
 				this.ready = true;
 				this.cwd = typeof event.cwd === 'string' && event.cwd.startsWith('/') && event.cwd.length < 1024 ? event.cwd : '/';
-				this._onProcessReady.fire({
-					pid: Number.isSafeInteger(event.pid) && (event.pid ?? 0) > 1 ? event.pid! : 0,
-					cwd: this.cwd,
-					windowsPty: undefined,
-				});
 				if (this.dimensions) {
 					this.send('resize', this.dimensions);
 					this.dimensions = undefined;
@@ -112,6 +107,14 @@ export class SevenAndroidTerminalProcess extends Disposable implements ITerminal
 				}
 				this.queuedInput.length = 0;
 				this.pendingBytes = 0;
+				// The terminal manager flushes its own queued commands upon
+				// onProcessReady. Preserve original ordering by flushing this
+				// adapter's older queued input first.
+				this._onProcessReady.fire({
+					pid: Number.isSafeInteger(event.pid) && (event.pid ?? 0) > 1 ? event.pid! : 0,
+					cwd: this.cwd,
+					windowsPty: undefined,
+				});
 				break;
 			case 'data':
 				if (typeof event.value === 'string' && event.value.length <= 100_000) {

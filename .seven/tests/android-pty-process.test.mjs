@@ -71,7 +71,11 @@ test('PTY buffers commands until native approval, then delivers real output/exit
     const proc = new SevenAndroidTerminalProcess(80, 24);
     const data = [], ready = [], exit = [];
     proc.onProcessData(text => data.push(text));
-    proc.onProcessReady(info => ready.push(info));
+    proc.onProcessReady(info => {
+        ready.push(info);
+        // The Code OSS terminal manager submits prelaunch commands here.
+        proc.input('printf "after-ready\\n"\r');
+    });
     proc.onProcessExit(code => exit.push(code));
     assert.equal(await proc.start(), undefined);
     const sessionId = app.writes[0].sessionId;
@@ -88,14 +92,16 @@ test('PTY buffers commands until native approval, then delivers real output/exit
     assert.equal(requests[0].type, 'resize');
     assert.equal(requests[0].cols, 140);
     assert.equal(requests[1].type, 'input');
+    assert.equal(requests[2].type, 'input', 'New commands submitted on ready must follow older queued input');
     assert.equal(Buffer.from(requests[1].data, 'base64').toString('utf8'), 'printf "native-ok\\n"\r');
+    assert.equal(Buffer.from(requests[2].data, 'base64').toString('utf8'), 'printf "after-ready\\n"\r');
     app.publish({ type: 'data', sessionId, value: Buffer.from('native-ok\r\n').toString('base64') });
     app.publish({ type: 'exit', sessionId, exitCode: 0 });
     await flush();
     assert.equal(data.join(''), 'native-ok\r\n');
     assert.equal(exit[0], 0);
     proc.input('must-not-run\r');
-    assert.equal(app.writes.filter(w => w.type === 'input').length, 1);
+    assert.equal(app.writes.filter(w => w.type === 'input').length, 2);
     app.native.close();
 });
 

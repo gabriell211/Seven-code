@@ -26,6 +26,8 @@ Referências oficiais:
 
 O painel de terminal e o mecanismo de registro de perfis **permanecem os originais do VS Code**.
 
+O Code OSS no Android agora redireciona terminais criados pelo painel ou por `window.createTerminal` para o `SevenAndroidTerminalProcess` (PTY nativo), preservando o mesmo ciclo de vida e `sendText`. O app entrega PID e CWD reais somente após a aprovação do shell. **Essa implementação ainda não foi homologada com Copilot autenticado nem em aparelho físico**; o shell local tem os comandos disponíveis no sandbox Android, não os binários da máquina remota.
+
 **Android:** a extensão interna `extensions/seven-code-mobile-terminal` registra o perfil `Android (Seven Code)`. O perfil usa `vscode.Pseudoterminal`, a ponte `src/vs/workbench/browser/sevenMobileTerminalBridge.ts` e o PTY JNI em `mobile/android/terminal`. O shell local `/system/bin/sh` requer autorização explícita para cada sessão e opera no sandbox do aplicativo. Os terminais remotos padrão do Code OSS continuam disponíveis.
 
 **iPhone/iPad:** o app SwiftUI/WKWebView carrega o mesmo web workbench do servidor original. O adaptador local experimental `ios_system` existe no repositório, mas ainda não está integrado ao aplicativo; até lá, o terminal permanece remoto e o shell iOS local não pode ser declarado operacional. Não afirmar que iOS suporta `fork/exec` tradicional.
