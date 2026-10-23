@@ -1,0 +1,21 @@
+name: SevenCode
+options:
+  bundleIdPrefix: dev.seven
+  deploymentTarget:
+    iOS: "16.0"
+targets:
+  SevenCode:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.seven.code
+        INFOPLIST_FILE: App/Info.plist
+        SWIFT_VERSION: "5.9"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        CODE_SIGNING_ALLOWED: "NO"
+        ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS: "NO"
+    scheme:
+      testTargets: []
