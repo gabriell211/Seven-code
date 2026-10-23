@@ -189,6 +189,7 @@ class MainActivity : Activity() {
                                 )
                                 pty.start(cols, rows)
                                 sessions[sessionId] = pty
+                                sendEvent("ready", sessionId)
                             } catch (error: Exception) {
                                 sendEvent("error", sessionId, error.message ?: "Falha ao abrir shell")
                                 sendEvent("exit", sessionId)
