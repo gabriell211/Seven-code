@@ -1,0 +1,39 @@
+{
+  "name": "seven-code-mobile-terminal",
+  "displayName": "Seven Code Mobile Terminal",
+  "description": "Terminal Android integrado ao workbench original do Seven Code.",
+  "publisher": "seven-code",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "browser": "./dist/browser/extension.js",
+  "extensionKind": [
+    "ui"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "capabilities": {
+    "virtualWorkspaces": true,
+    "untrustedWorkspaces": {
+      "supported": false
+    }
+  },
+  "categories": [
+    "Other"
+  ],
+  "contributes": {
+    "terminal": {
+      "profiles": [
+        {
+          "id": "sevenCode.android.local",
+          "title": "Android (Seven Code)",
+          "icon": "terminal-bash"
+        }
+      ]
+    }
+  }
+}
