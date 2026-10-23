@@ -41,6 +41,18 @@ O próprio Code OSS escolhe o host de execução conforme o manifesto da extens�
 
 A extensão que fornece o terminal Android **não** substitui o gerenciador original de extensões e não deve alterar a política de instalação das demais.
 
+## GitHub Copilot — comportamento original
+
+O **GitHub Copilot não será reimplementado nem substituído** por outro provedor. Preservar `extensions/copilot` (`GitHub.copilot-chat`), a API de Chat/Agent, o serviço de extensões e `extensions/github-authentication` do Code OSS.
+
+- **Sugestões, Chat, Inline Chat, Agent Mode e alterações de arquivos:** dependem de instalar/disponibilizar a extensão compatível, autenticar a conta GitHub e ter acesso ao serviço Copilot.
+- **Execução do Copilot:** o manifesto atual de `extensions/copilot` possui entrada `main` (Node.js) e não possui `browser`; no web workbench mobile, exige o **remote Node extension host do Code OSS**, na revisão correta. Não prometer que funcionará dentro de uma WebView isolada nem que qualquer instalação do VS Code Server oficial aceitará esta fork.
+- **Comandos executados pelo Copilot:** preservar as APIs originais do terminal do VS Code. No Android, o perfil local `Android (Seven Code)` fornece um `Pseudoterminal` nativo quando explicitamente selecionado e aprovado. Quando o Copilot usa um terminal do workspace remoto, a execução ocorre no servidor, **não** no Android.
+- **No iOS**, ferramentas que executam processos precisam usar o terminal remoto até que uma integração local compatível com iOS seja homologada.
+- **Segurança:** não transmitir tokens GitHub/Copilot ao bridge PTY, não executar comandos sem permissão e não simular sucesso sem `exitCode` e saída verificáveis.
+
+O teste `.seven/tests/mobile-workbench.test.mjs` verifica que o manifesto original do Copilot, a autenticação GitHub e o extension host remoto continuam presentes. **Isso não é um E2E:** ainda falta validar login OAuth, disponibilidade da extensão no build, sugestões, Chat/Agent, seleção do terminal e execução de ferramentas reais com uma conta autorizada. Não declarar o Copilot operacional no mobile antes dessa homologação.
+
 ## Como abrir o editor em Android/iOS
 
 1. Execute o **servidor web original do Code OSS na mesma revisão** do Seven Code, seguindo os scripts/etapas oficiais do repositório. Não publicar o servidor de desenvolvimento diretamente na internet.
