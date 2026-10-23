@@ -29,4 +29,6 @@ jobs:
           fi
           test -f LICENSE.txt
           test -f ThirdPartyNotices.txt
+          test -s .github/copilot-instructions.md
+          test -d .agents/skills
           node -e 'const p=require("./product.json");if(p.nameShort!=="Seven Code"||p.applicationName!=="seven-code"||!p.extensionsGallery?.serviceUrl?.startsWith("https://open-vsx.org/"))process.exit(1)'
