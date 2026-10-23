@@ -11,7 +11,7 @@
 
 ## Importante antes de instalar
 
-É indispensável **ter um Seven Code Web Server autenticado, em HTTPS e compatível com esta revisão do repositório**. Não existe servidor público configurado no APK. Sem isso, o aplicativo exibe somente a tela para informar o servidor.
+É indispensável **ter o servidor web original do Code OSS, compilado da mesma revisão e disponibilizado sob HTTPS autenticado; nenhum servidor proprietário Seven Code é necessário**. Não existe servidor público configurado no APK. Sem isso, o aplicativo exibe somente a tela para informar o servidor.
 
 Extensões com entrada \`browser\` podem executar no **web extension host**. Extensões que dependem de \`node\`, executáveis nativos, terminal de ferramentas, depuração e language servers exigem um **host de extensão de workspace remoto**. A presença desses mecanismos no Code OSS não garante compatibilidade de todas as extensões; os testes end-to-end com servidor externo estão pendentes.
 
