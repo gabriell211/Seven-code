@@ -22,6 +22,7 @@ import { type IExtensionDefinition, getExtensionStream } from './builtInExtensio
 import { fetchUrls, fetchGithub } from './fetch.ts';
 import { createTsgoStream, spawnTsgo } from './tsgo.ts';
 import watcher from './watch/index.ts';
+import { getBuiltInCopilotSdkFiles } from './copilotExtensionPackage.ts';
 
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
@@ -155,7 +156,8 @@ function fromLocalEsbuild(extensionPath: string, esbuildConfigFileName: string):
 	// Extensions built with esbuild can still externalize runtime dependencies.
 	// Ensure those externals are included in the packaged built-in extension.
 	const packagedDependenciesByExtension: Record<string, string[]> = {
-		'git': ['@vscode/fs-copyfile']
+		'git': ['@vscode/fs-copyfile'],
+		'copilot': ['@github/copilot'],
 	};
 	const packagedDependencies = packagedDependenciesByExtension[extensionName] ?? [];
 
@@ -184,7 +186,11 @@ function fromLocalEsbuild(extensionPath: string, esbuildConfigFileName: string):
 		return vsce.listFiles({ cwd: extensionPath, packageManager: vsce.PackageManager.None });
 	}).then(fileNames => {
 		if (packagedDependencies.length > 0) {
-			const packagedDependencyFileNames = packagedDependencies.flatMap(dependency =>
+			// Collect only after esbuild's postinstall has materialized the SDK. The
+			// global agent-host module filters remove this extension-owned runtime.
+			const packagedDependencyFileNames = extensionName === 'copilot'
+				? getBuiltInCopilotSdkFiles(extensionPath).map(filePath => path.relative(extensionPath, filePath))
+				: packagedDependencies.flatMap(dependency =>
 				glob.sync(path.join(extensionPath, 'node_modules', dependency, '**'), { nodir: true, dot: true })
 					.map(filePath => path.relative(extensionPath, filePath))
 					.filter(filePath => {

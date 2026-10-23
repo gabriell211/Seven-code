@@ -18,6 +18,7 @@ jobs:
         run: |
           node --check .seven/apply-brand.mjs
           node --test .seven/tests/branding.test.mjs
+          node --test build/lib/test/copilotExtensionPackage.test.ts
           node --experimental-strip-types --test mobile/capabilities/capability-resolver.test.mjs
           node --experimental-strip-types --test mobile/terminal-core/ai-terminal-tool.test.mjs
           node --experimental-strip-types --test mobile/remote/seven-workspace-client.test.mjs
