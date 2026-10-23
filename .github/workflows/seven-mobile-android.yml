@@ -30,6 +30,7 @@ jobs:
         run: node --experimental-strip-types --test mobile/capabilities/capability-resolver.test.mjs
       - name: Testar cliente de workspace remoto seguro
         run: node --experimental-strip-types --test mobile/remote/seven-workspace-client.test.mjs
+          node --test .seven/tests/mobile-workbench.test.mjs
       - name: Construir interface xterm.js
         working-directory: mobile/terminal-ui
         run: |
