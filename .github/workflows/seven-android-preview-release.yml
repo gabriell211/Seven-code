@@ -1,0 +1,159 @@
+name: Seven Code Android Preview Release
+
+on:
+  push:
+    branches: ["release/v0.2.0-android-preview.1"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: seven-android-preview-v0.2.0
+  cancel-in-progress: true
+
+jobs:
+  android:
+    name: Android JNI emulator, UI setup and installable APK
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Execute terminal, workbench bridge, authentication and package tests
+        run: |
+          set -euo pipefail
+          node --experimental-strip-types --test mobile/terminal-core/ai-terminal-tool.test.mjs
+          node --experimental-strip-types --test mobile/remote/seven-workspace-client.test.mjs
+          node --test .seven/tests/mobile-workbench.test.mjs
+          node --test .seven/tests/android-pty-process.test.mjs
+          node --test .seven/tests/android-apk-package.test.mjs
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.13"
+      - name: Install Android native toolchains
+        run: |
+          yes | sdkmanager --licenses > /dev/null || true
+          sdkmanager "platforms;android-36" "build-tools;36.0.0" "cmake;3.22.1" "ndk;27.2.12479018"
+      - name: Build the Android APK
+        run: gradle -p mobile/android :app:assembleDebug --no-daemon --stacktrace
+      - name: Reject APK without JNI and required Android runtime components
+        run: node .seven/verify-android-apk.mjs
+      - name: Enable KVM for the real Android emulator
+        run: |
+          test -e /dev/kvm || { echo "::error::No KVM for mandatory native tests"; exit 1; }
+          sudo chmod 666 /dev/kvm
+      - name: Run actual JNI PTY, AI runner and HTTPS setup in Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: gradle -p mobile/android :app:connectedDebugAndroidTest --no-daemon --stacktrace
+      - name: Prepare actual installable APK
+        run: |
+          mkdir -p release-assets
+          cp mobile/android/app/build/outputs/apk/debug/app-debug.apk release-assets/SevenCode-v0.2.0-android-preview.1-debug.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SevenCode-Android-Preview-Verified
+          path: release-assets/*.apk
+          if-no-files-found: error
+          retention-days: 14
+
+  server:
+    name: Code OSS server and authenticated Chromium editor E2E
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      NODE_OPTIONS: --max-old-space-size=6144
+      VSCODE_QUALITY: oss
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - name: Install native build libraries
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libsecret-1-dev libkrb5-dev libx11-dev libxkbfile-dev libnotify-dev libnss3-dev libatk-bridge2.0-dev libasound2-dev libgbm-dev
+      - name: Install Code OSS exact dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Compile actual web editor, remote extension host and Copilot source
+        run: |
+          npm run gulp compile-web
+          npm run gulp vscode-reh-web-linux-x64-min
+      - name: Install Chromium revision pinned by playwright-core
+        run: |
+          node node_modules/playwright-core/cli.js install --with-deps chromium
+          node -e "const fs=require('node:fs'); const p=require('playwright-core').chromium.executablePath(); if(!fs.existsSync(p)) throw new Error('Missing Chromium: '+p)"
+      - name: Start authenticated Code OSS and render real editor in Chromium
+        env:
+          SEVEN_CODE_BROWSER_E2E: "1"
+        run: |
+          set -euo pipefail
+          root="../vscode-reh-web-linux-x64"
+          test -s "$root/out/server-main.js"
+          test -s "$root/out/vs/code/browser/workbench/workbench.js"
+          test -s "$root/extensions/copilot/dist/extension.js"
+          test "$(du -sm "$root" | cut -f1)" -ge 30
+          node .seven/verify-server.mjs "$root"
+      - name: Create complete server archive
+        run: |
+          mkdir -p release-assets
+          tar -C .. -czf release-assets/SevenCode-Server-Web-linux-x64-v0.2.0-android-preview.1.tar.gz vscode-reh-web-linux-x64
+          test "$(stat -c %s release-assets/*.tar.gz)" -ge 15000000
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SevenCode-OSS-Server-Verified
+          path: release-assets/*.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    name: Publish verified Android-only developer preview
+    needs: [android, server]
+    if: ${{ needs.android.result == 'success' && needs.server.result == 'success' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: SevenCode-Android-Preview-Verified
+          path: release-assets
+      - uses: actions/download-artifact@v4
+        with:
+          name: SevenCode-OSS-Server-Verified
+          path: release-assets
+      - name: Confirm both artifacts are nonempty, produce SHA-256 manifest
+        run: |
+          set -euo pipefail
+          cd release-assets
+          test -s SevenCode-v0.2.0-android-preview.1-debug.apk
+          test -s SevenCode-Server-Web-linux-x64-v0.2.0-android-preview.1.tar.gz
+          sha256sum *.apk *.tar.gz > SHA256SUMS.txt
+          sha256sum --check SHA256SUMS.txt
+      - name: Create transparent verified prerelease
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = 'refs/heads/release/v0.2.0-android-preview.1'
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test ! -z "$(find release-assets -name 'SevenCode-Server-Web-linux-x64-*.tar.gz')"
+          gh release create 'v0.2.0-android-preview.1' release-assets/* --prerelease \
+            --target "$GITHUB_SHA" --title 'Seven Code v0.2.0 — Android remote editor preview' \
+            --notes-file docs/RELEASE-ANDROID-PREVIEW.md
