@@ -4,6 +4,12 @@ Editor multiplataforma baseado no [Code - OSS](https://github.com/microsoft/vsco
 
 > **Estado em 23/10/2026:** fonte Code - OSS importada na `main` e identidade Seven Code aplicada. A aplicação Android carrega o Code OSS Web Workbench original, com perfil de PTY nativo, e há um projeto iOS com build de simulador aprovado. A execução real do workbench e das extensões em servidor autenticado ainda requer homologação.
 
+## Status real da release Android
+
+**A versão `v0.1.0-alpha.3` é uma prévia, não um VS Code completo para uso sem configuração.** Seu APK de aproximadamente 1,46 MB contém o host Android/WebView e o terminal PTY; o workbench Code OSS e os hosts de extensões vêm do servidor Linux publicado separadamente, que precisa ser instalado e protegido com HTTPS/autenticação. Não há um servidor pré-configurado e a conta Copilot ainda não passou por E2E em dispositivo.
+
+**Política de publicação:** novas releases só poderão ser publicadas pelo fluxo atualizado após verificações reais, no mesmo commit, de Android/workbench, iOS físico, Copilot autenticado com execução no terminal nativo e servidor/extensões. Testes unitários, simulações, artefatos gerados ou status verde de build **não** comprovam essas condições. Consulte [critérios de homologação](docs/RELEASE-QUALIFICATION.md).
+
 ## Plataformas
 
 - **Windows, Linux e macOS:** distribuição desktop baseada no Electron do Code - OSS, após importar, compilar e assinar os artefatos.
