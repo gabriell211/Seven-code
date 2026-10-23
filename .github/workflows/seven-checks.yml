@@ -22,6 +22,10 @@ jobs:
           node --experimental-strip-types --test mobile/terminal-core/ai-terminal-tool.test.mjs
           node --experimental-strip-types --test mobile/remote/seven-workspace-client.test.mjs
           python -m py_compile .seven/render-icons.py
-          if [ -f product.json ]; then
-            node -e 'const p=require("./product.json");if(p.nameShort!=="Seven Code")process.exit(1)'
+          if [ ! -f product.json ] || [ ! -f src/vs/workbench/workbench.desktop.main.ts ]; then
+            echo "::error::A importação do Code - OSS ainda não foi concluída."
+            exit 1
           fi
+          test -f LICENSE.txt
+          test -f ThirdPartyNotices.txt
+          node -e 'const p=require("./product.json");if(p.nameShort!=="Seven Code"||p.applicationName!=="seven-code"||!p.extensionsGallery?.serviceUrl?.startsWith("https://open-vsx.org/"))process.exit(1)'
