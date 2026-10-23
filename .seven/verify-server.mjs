@@ -18,7 +18,10 @@ const resources = [
 	'out/vs/workbench/api/worker/extensionHostWorkerMain.js',
 	'extensions/seven-code-mobile-terminal/dist/browser/extension.js',
 	'extensions/github-authentication/package.json',
+	'extensions/github-authentication/dist/extension.js',
+	'extensions/github-authentication/dist/browser/extension.js',
 	'extensions/copilot/package.json',
+	'extensions/copilot/dist/extension.js',
 ];
 for (const resource of resources) {
 	assert.ok((await stat(join(root, resource))).size > 0, `Missing packaged resource: ${resource}`);

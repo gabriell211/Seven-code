@@ -39,7 +39,9 @@ jobs:
           test -d .agents/skills
           npm ci --no-audit --no-fund
       - name: Package full upstream web server with web workbench and extension host
-        run: npm run gulp vscode-reh-web-linux-x64-min
+        run: |
+          npm run gulp compile-web
+          npm run gulp vscode-reh-web-linux-x64-min
       - name: Verify compiled production editor and extension hosts
         run: |
           set -euo pipefail

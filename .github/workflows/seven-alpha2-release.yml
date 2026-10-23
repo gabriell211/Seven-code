@@ -98,7 +98,9 @@ jobs:
           test -d .agents/skills
           npm ci --no-audit --no-fund
       - name: Compile complete Code OSS server, web workbench and extension hosts
-        run: npm run gulp vscode-reh-web-linux-x64-min
+        run: |
+          npm run gulp compile-web
+          npm run gulp vscode-reh-web-linux-x64-min
       - name: Validate compiled Code OSS server and all major runtime components
         run: |
           set -euo pipefail
@@ -144,6 +146,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          branch_sha=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/release/v0.1.0-alpha.2" --jq .object.sha)
+          test "$branch_sha" = "$GITHUB_SHA" || { echo "Release branch advanced; refusing stale artifacts."; exit 1; }
           if gh release view v0.1.0-alpha.2 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "Release already exists; refusing to overwrite its assets."
             exit 1
