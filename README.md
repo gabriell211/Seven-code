@@ -7,7 +7,7 @@ Editor multiplataforma baseado no [Code - OSS](https://github.com/microsoft/vsco
 ## Plataformas
 
 - **Windows, Linux e macOS:** distribuição desktop baseada no Electron do Code - OSS, após importar, compilar e assinar os artefatos.
-- **Android e iOS:** aplicativos nativos WebView/WKWebView para acessar o **mesmo web workbench Code OSS** por HTTPS autenticado, sem redesenhar o editor. Extensões browser rodam no web extension host e extensões Node.js precisam de um host de workspace remoto. O terminal Android tem PTY nativo; o iOS usa terminal remoto enquanto o adaptador local não estiver integrado.
+- **Android e iOS:** aplicativos nativos WebView/WKWebView para acessar o **servidor e web workbench originais do Code OSS** por HTTPS autenticado, sem redesenhar o editor ou criar outro backend. Extensões browser rodam no web extension host e extensões Node.js precisam de um host de workspace remoto. O terminal Android tem PTY nativo; o iOS usa terminal remoto enquanto o adaptador local não estiver integrado.
 
 ## Fonte original e licença
 
@@ -29,7 +29,7 @@ Origem: [microsoft/vscode](https://github.com/microsoft/vscode). O núcleo Code 
 - **IA:** `mobile/terminal-core/ai-terminal-tool.ts` implementa o contrato `execute_command`. No Android, **todo comando proposto exige aprovação visível na interface nativa** antes de ser executado em uma sessão separada do terminal do usuário.
 - **Limitações:** a conexão de um provedor de IA e a homologação completa de workbench, backend remoto e extensões ainda não foram concluídas. Veja [arquitetura do terminal](docs/AI-TERMINAL.md).
 
-Os workflows `seven-mobile-android.yml` e `seven-ios.yml` geram builds de depuração do host Android e do app de simulador iOS. **O APK precisa de um servidor Code OSS Web HTTPS configurado para carregar o editor e suas extensões.** Veja [instruções de instalação e extensões](docs/MOBILE.md).
+Os workflows `seven-mobile-android.yml` e `seven-ios.yml` geram builds de depuração do host Android e do app de simulador iOS. **O APK usa o **servidor web original do Code OSS/VS Code (compilado da mesma revisão)** via HTTPS; não existe backend proprietário Seven Code separado.** Veja [instruções de instalação e extensões](docs/MOBILE.md).
 
 ## Compatibilidade de recursos no celular
 
@@ -37,7 +37,7 @@ Os workflows `seven-mobile-android.yml` e `seven-ios.yml` geram builds de depura
 
 - No Android, a base de terminal local usa PTY/JNI. Isso não equivale a compilar qualquer projeto no dispositivo.
 - No iOS, comandos locais usam bibliotecas embarcadas; funcionalidades que exigem processos arbitrários utilizam ambiente remoto autorizado.
-- Depuração, extensões Node.js, servidores de linguagem, containers, compiladores e ferramentas externas requerem um runtime realmente compatível. A implementação atual ainda **não** fornece um servidor/workspace remoto operacional.
+- Depuração, extensões Node.js, servidores de linguagem, containers, compiladores e ferramentas externas requerem um runtime realmente compatível. O repositório contém a implementação upstream de servidor/workspace do Code OSS, mas **a implantação autenticada e os testes ponta a ponta ainda não foram homologados**.
 - As extensões devem ser obtidas de fontes legalmente compatíveis com Code - OSS, como **Open VSX**; o Marketplace da Microsoft não é redistribuível em forks independentes.
 
 > A matriz registra requisitos e testa roteamento. Ela **não** significa que todas as ferramentas já estejam implementadas ou homologadas.
