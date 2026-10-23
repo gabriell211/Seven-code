@@ -36,8 +36,8 @@ struct SevenCodeHome: View {
             } else {
                 VStack(alignment: .leading, spacing: 20) {
                     Text("Seven Code").font(.largeTitle.bold())
-                    Text("Conecte-se ao seu servidor HTTPS Seven Code Web para abrir o workbench original do Code OSS e as extensões compatíveis.")
-                    TextField("https://code.exemplo.com", text: $candidate)
+                    Text("Conecte-se ao servidor web padrão do Code OSS compatível com esta versão. O editor e as extensões usam o mesmo backend do VS Code.")
+                    TextField("https://seu-servidor-code-oss.exemplo", text: $candidate)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                         .keyboardType(.URL)
@@ -54,7 +54,7 @@ struct SevenCodeHome: View {
                         }
                     }
                 } message: {
-                    Text("Use somente seu servidor Code OSS autenticado. Extensões web executam no workbench; extensões Node.js precisam do host remoto autorizado.")
+                    Text("Use o servidor Code OSS compatível e autenticado. Não é necessário criar servidor Seven Code independente; extensões Node.js usam o host remoto original.")
                 }
             }
         }
