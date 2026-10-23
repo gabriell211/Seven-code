@@ -1,0 +1,150 @@
+name: Seven Code Alpha 2 Full Release
+
+on:
+  push:
+    branches:
+      - release/v0.1.0-alpha.2
+
+permissions:
+  contents: write
+
+jobs:
+  android:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 70
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Check terminal and mobile features
+        run: |
+          node --test .seven/tests/mobile-workbench.test.mjs
+          node --experimental-strip-types --test mobile/capabilities/capability-resolver.test.mjs
+          node --experimental-strip-types --test mobile/remote/seven-workspace-client.test.mjs
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.13"
+      - name: Android toolchains
+        run: |
+          yes | sdkmanager --licenses > /dev/null || true
+          sdkmanager "platforms;android-36" "build-tools;36.0.0" "cmake;3.22.1" "ndk;27.2.12479018"
+      - name: Build native Android workbench host APK
+        run: gradle -p mobile/android :app:assembleDebug --no-daemon --stacktrace
+      - name: Prepare release artifact
+        run: |
+          mkdir -p release-assets
+          cp mobile/android/app/build/outputs/apk/debug/app-debug.apk release-assets/SevenCode-v0.1.0-alpha.2-Android-debug.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SevenCode-Android-Alpha
+          path: release-assets/*.apk
+          if-no-files-found: error
+
+  ios:
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate Xcode project
+        run: xcodegen generate --spec mobile/ios/project.yml --project mobile/ios
+      - name: Compile iOS simulator host
+        run: |
+          xcodebuild -project mobile/ios/SevenCode.xcodeproj \
+            -scheme SevenCode -configuration Debug \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/seven-code-ios" \
+            CODE_SIGNING_ALLOWED=NO build
+      - name: Package simulator app
+        run: |
+          mkdir -p release-assets
+          ditto -c -k --sequesterRsrc --keepParent \
+            "$RUNNER_TEMP/seven-code-ios/Build/Products/Debug-iphonesimulator/SevenCode.app" \
+            release-assets/SevenCode-v0.1.0-alpha.2-iOS-Simulator.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SevenCode-iOS-Alpha
+          path: release-assets/*.zip
+          if-no-files-found: error
+
+  server:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      NODE_OPTIONS: --max-old-space-size=6144
+      VSCODE_QUALITY: oss
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - name: Install upstream native build prerequisites
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libsecret-1-dev libkrb5-dev libx11-dev libxkbfile-dev libnotify-dev libnss3-dev libatk-bridge2.0-dev libasound2-dev libgbm-dev
+      - name: Install exact Code OSS dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Compile complete Code OSS server, web workbench and extension hosts
+        run: npm run gulp vscode-reh-web-linux-x64-min
+      - name: Validate compiled Code OSS server and all major runtime components
+        run: |
+          set -euo pipefail
+          root="../vscode-reh-web-linux-x64"
+          test -d "$root"
+          test -s "$root/out/server-main.js"
+          test -s "$root/out/vs/code/browser/workbench/workbench.js"
+          test -d "$root/extensions"
+          test -d "$root/node_modules"
+          test -x "$root/bin/seven-code-server"
+          test "$(du -sm "$root" | cut -f1)" -ge 30
+          "$root/bin/seven-code-server" --help >/tmp/seven-code-help.txt
+          head -35 /tmp/seven-code-help.txt
+          du -sh "$root"
+      - name: Archive verified server and checksum
+        run: |
+          mkdir -p release-assets
+          tar -C .. -czf release-assets/SevenCode-Server-Web-linux-x64.tar.gz vscode-reh-web-linux-x64
+          test "$(stat -c %s release-assets/SevenCode-Server-Web-linux-x64.tar.gz)" -ge 15000000
+          sha256sum release-assets/SevenCode-Server-Web-linux-x64.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SevenCode-Server-Alpha
+          path: release-assets/SevenCode-Server-Web-linux-x64.tar.gz
+          if-no-files-found: error
+
+  release:
+    needs: [android, ios, server]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: SevenCode-*-Alpha
+          merge-multiple: true
+          path: release-assets
+      - name: Generate checksums
+        run: |
+          cd release-assets
+          sha256sum *.apk *.zip *.tar.gz > SHA256SUMS.txt
+      - name: Publish verified prerelease
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view v0.1.0-alpha.2 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release already exists; refusing to overwrite its assets."
+            exit 1
+          fi
+          gh release create v0.1.0-alpha.2 release-assets/* \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "Seven Code v0.1.0-alpha.2 — Android/iOS Workbench (preview)" \
+            --notes-file docs/RELEASE-ALPHA-2.md \
+            --prerelease --latest=false
