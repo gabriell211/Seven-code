@@ -23,7 +23,7 @@ import java.io.IOException
 import java.io.ByteArrayInputStream
 
 /**
- * Host for the unmodified Code OSS web workbench, served over authenticated HTTPS.
+ * Host for the original Code OSS web workbench, served by the upstream-compatible VS Code web server over authenticated HTTPS.
  * The mobile-only addition is the native terminal bridge. No fake editor UI is used.
  */
 class MainActivity : Activity() {
@@ -61,13 +61,13 @@ class MainActivity : Activity() {
             setPadding(pad, pad, pad, pad)
         }
         layout.addView(TextView(this).apply {
-            text = "Seven Code — Code OSS\n\nInforme o endereço HTTPS do seu servidor Seven Code Web. " +
-                "O editor completo e as extensões carregam desse servidor; o terminal Android é nativo."
+            text = "Seven Code — Code OSS\n\nInforme o HTTPS do servidor web do Code OSS, compatível com esta versão. " +
+                "Editor, extensões e Git usam o servidor do Code OSS; somente o terminal Android é nativo."
             textSize = 18f
         })
         if (error != null) layout.addView(TextView(this).apply { text = error })
         val field = EditText(this).apply {
-            hint = "https://code.exemplo.com"
+            hint = "https://seu-servidor-code-oss.exemplo"
             inputType = android.text.InputType.TYPE_CLASS_TEXT or
                 android.text.InputType.TYPE_TEXT_VARIATION_URI
             setSingleLine(true)
