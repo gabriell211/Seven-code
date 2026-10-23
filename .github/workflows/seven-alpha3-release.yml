@@ -8,8 +8,34 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: seven-code-alpha3-release
+  cancel-in-progress: true
+
 jobs:
+  cancel-stale:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - name: Cancel superseded alpha builds
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for workflow in seven-alpha2-release.yml seven-alpha3-release.yml; do
+            gh run list --repo "$GITHUB_REPOSITORY" --workflow "$workflow" --limit 30 \
+              --json databaseId,status --jq '.[] | select(.status != "completed") | .databaseId' |
+            while read -r run_id; do
+              if [ "$run_id" != "$GITHUB_RUN_ID" ]; then
+                gh run cancel "$run_id" --repo "$GITHUB_REPOSITORY" || echo "Run $run_id already finished or cancellation unavailable."
+              fi
+            done
+          done
+
   android:
+    needs: cancel-stale
     runs-on: ubuntu-24.04
     timeout-minutes: 70
     steps:
@@ -49,6 +75,7 @@ jobs:
           if-no-files-found: error
 
   ios:
+    needs: cancel-stale
     runs-on: macos-15
     timeout-minutes: 45
     steps:
@@ -77,6 +104,7 @@ jobs:
           if-no-files-found: error
 
   server:
+    needs: cancel-stale
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     env:
@@ -89,8 +117,12 @@ jobs:
           node-version-file: .nvmrc
       - name: Install upstream native build prerequisites
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq libsecret-1-dev libkrb5-dev libx11-dev libxkbfile-dev libnotify-dev libnss3-dev libatk-bridge2.0-dev libasound2-dev libgbm-dev
+          packages=(libsecret-1-dev libkrb5-dev libx11-dev libxkbfile-dev libnotify-dev libnss3-dev libatk-bridge2.0-dev libasound2-dev libgbm-dev)
+          apt_options=(-o Acquire::Retries=2 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20)
+          if ! timeout 180s sudo apt-get "${apt_options[@]}" install -y -qq "${packages[@]}"; then
+            timeout 180s sudo apt-get "${apt_options[@]}" update -qq
+            timeout 180s sudo apt-get "${apt_options[@]}" install -y -qq "${packages[@]}"
+          fi
       - name: Install exact Code OSS dependencies
         run: |
           test -s .github/copilot-instructions.md
