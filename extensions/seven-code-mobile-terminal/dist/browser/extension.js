@@ -16,6 +16,7 @@ class SevenAndroidPty {
         this.ready = false;
         this.pendingInput = [];
         this.pendingInputBytes = 0;
+        this.pendingDimensions = undefined;
         this.onDidWriteEmitter = new vscode.EventEmitter();
         this.onDidCloseEmitter = new vscode.EventEmitter();
         this.onDidWrite = this.onDidWriteEmitter.event;
@@ -26,7 +27,10 @@ class SevenAndroidPty {
             const message = event.data;
             if (!message || message.sessionId !== this.sessionId || this.closed) return;
             if (message.type === 'ready') {
+                if (this.ready) return;
                 this.ready = true;
+                if (this.pendingDimensions) this.send({ type: 'resize', ...this.pendingDimensions });
+                this.pendingDimensions = undefined;
                 for (const bytes of this.pendingInput) this.postInputBytes(bytes);
                 this.pendingInput = [];
                 this.pendingInputBytes = 0;
@@ -47,6 +51,7 @@ class SevenAndroidPty {
                 this.closed = true;
                 this.pendingInput = [];
                 this.pendingInputBytes = 0;
+                this.pendingDimensions = undefined;
                 this.onDidWriteEmitter.fire(this.decoder.decode());
                 this.onDidCloseEmitter.fire(typeof message.exitCode === 'number' ? message.exitCode : undefined);
                 this.channel.close();
@@ -87,7 +92,18 @@ class SevenAndroidPty {
         this.postInputBytes(bytes);
     }
     setDimensions(dimensions) {
-        this.send({ type: 'resize', cols: dimensions.columns, rows: dimensions.rows });
+        if (this.closed) return;
+        const size = {
+            cols: Math.max(1, Math.min(1000, Math.round(dimensions.columns))),
+            rows: Math.max(1, Math.min(1000, Math.round(dimensions.rows))),
+        };
+        if (!Number.isFinite(size.cols) || !Number.isFinite(size.rows)) return;
+        // The native session does not exist until permission is granted.
+        if (!this.ready) {
+            this.pendingDimensions = size;
+            return;
+        }
+        this.send({ type: 'resize', ...size });
     }
     close() {
         if (this.closed) return;
@@ -95,6 +111,7 @@ class SevenAndroidPty {
         this.closed = true;
         this.pendingInput = [];
         this.pendingInputBytes = 0;
+        this.pendingDimensions = undefined;
         this.channel.close();
         this.onDidWriteEmitter.dispose();
         this.onDidCloseEmitter.dispose();

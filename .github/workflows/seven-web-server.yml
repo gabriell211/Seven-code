@@ -33,7 +33,10 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq libsecret-1-dev libkrb5-dev libx11-dev libxkbfile-dev libnotify-dev libnss3-dev libatk-bridge2.0-dev libasound2-dev libgbm-dev
       - name: Install Code OSS upstream dependencies
-        run: npm ci --no-audit --no-fund
+        run: |
+          test -s .github/copilot-instructions.md
+          test -d .agents/skills
+          npm ci --no-audit --no-fund
       - name: Package full upstream web server with web workbench and extension host
         run: npm run gulp vscode-reh-web-linux-x64-min
       - name: Verify compiled production editor and extension hosts
@@ -51,6 +54,7 @@ jobs:
           test "$(du -sm "$root" | cut -f1)" -ge 30
           "$root/bin/seven-code-server" --help > /tmp/seven-server-help.txt
           head -60 /tmp/seven-server-help.txt
+          node .seven/verify-server.mjs "$root"
       - name: Compress full compiled server
         run: |
           tar -C .. -czf "$RUNNER_TEMP/SevenCode-Server-Web-linux-x64.tar.gz" vscode-reh-web-linux-x64

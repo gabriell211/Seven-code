@@ -29,6 +29,7 @@ import java.io.ByteArrayInputStream
 class MainActivity : Activity() {
     private lateinit var webView: WebView
     private val sessions = mutableMapOf<String, SevenPty>()
+    private val pendingSessions = mutableMapOf<String, AlertDialog>()
     private var trustedOrigin: String = ""
     private var aiRunner: SevenAiCommandRunner? = null
     private var aiRequestId: String? = null
@@ -161,19 +162,26 @@ class MainActivity : Activity() {
             if (!sessionPattern.matches(sessionId)) return
             when (data.optString("type")) {
                 "start" -> {
-                    if (sessions.containsKey(sessionId)) return
+                    if (sessions.containsKey(sessionId) || pendingSessions.containsKey(sessionId)) return
                     val cols = data.optInt("cols")
                     val rows = data.optInt("rows")
                     if (cols !in 1..1000 || rows !in 1..1000) return
-                    AlertDialog.Builder(this)
+                    fun rejectSession() {
+                        if (pendingSessions.remove(sessionId) == null) return
+                        sendEvent("error", sessionId, "Terminal negado pelo usuário")
+                        sendEvent("exit", sessionId)
+                    }
+                    val dialog = AlertDialog.Builder(this)
                         .setTitle("Abrir terminal Android?")
                         .setMessage("Autorizar sessão do shell local /system/bin/sh? " +
                             "Os comandos executarão com as permissões do Seven Code no Android.")
-                        .setNegativeButton("Negar") { _, _ ->
-                            sendEvent("error", sessionId, "Terminal negado pelo usuário")
-                            sendEvent("exit", sessionId)
-                        }
+                        .setNegativeButton("Negar") { _, _ -> rejectSession() }
+                        .setOnCancelListener { rejectSession() }
                         .setPositiveButton("Abrir terminal") { _, _ ->
+                            // The editor can close the terminal while approval is open.
+                            if (pendingSessions.remove(sessionId) == null || isFinishing || isDestroyed) {
+                                return@setPositiveButton
+                            }
                             try {
                                 val pty = SevenPty(this,
                                     onData = { bytes ->
@@ -194,7 +202,9 @@ class MainActivity : Activity() {
                                 sendEvent("error", sessionId, error.message ?: "Falha ao abrir shell")
                                 sendEvent("exit", sessionId)
                             }
-                        }.show()
+                        }.create()
+                    pendingSessions[sessionId] = dialog
+                    dialog.show()
                 }
                 "input" -> {
                     val encoded = data.optString("data")
@@ -203,7 +213,10 @@ class MainActivity : Activity() {
                     if (bytes.size <= 65_536) sessions[sessionId]?.write(bytes)
                 }
                 "resize" -> sessions[sessionId]?.resize(data.optInt("cols"), data.optInt("rows"))
-                "close" -> sessions.remove(sessionId)?.close()
+                "close" -> {
+                    pendingSessions.remove(sessionId)?.dismiss()
+                    sessions.remove(sessionId)?.close()
+                }
             }
         } catch (error: Exception) {
             // A malformed web message must not crash the Android workbench.
@@ -292,6 +305,8 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
+        pendingSessions.values.toList().forEach { it.dismiss() }
+        pendingSessions.clear()
         aiRunner?.cancel()
         aiRunner = null
         sessions.values.toList().forEach { it.close() }

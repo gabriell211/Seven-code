@@ -132,6 +132,74 @@ test('PTY forwards terminal input/resize to native and streams UTF-8 output', as
     app.host.close();
 });
 
+test('PTY applies the latest dimensions after approval before flushing commands', async () => {
+    const app = launch(true);
+    await app.activate();
+    const pty = app.provider().provideTerminalProfile().options.pty;
+    pty.open({ columns: 80, rows: 24 });
+    pty.setDimensions({ columns: 100, rows: 30 });
+    pty.setDimensions({ columns: 120, rows: 40 });
+    pty.handleInput('stty size\r');
+    await new Promise(resolve => setTimeout(resolve, 0));
+    assert.equal(app.messages.filter(m => m.type === 'resize').length, 0);
+    const start = app.messages.find(m => m.type === 'start');
+    app.host.postMessage({ type: 'ready', sessionId: start.sessionId });
+    app.host.postMessage({ type: 'ready', sessionId: start.sessionId });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    const forwarded = app.messages.filter(m => m.type === 'resize' || m.type === 'input');
+    assert.equal(forwarded.length, 2);
+    assert.equal(forwarded[0].type, 'resize');
+    assert.equal(forwarded[0].cols, 120);
+    assert.equal(forwarded[0].rows, 40);
+    assert.equal(forwarded[1].type, 'input');
+    pty.close();
+    app.host.close();
+});
+
+test('PTY never flushes queued commands after permission denial or local close', async () => {
+    for (const localClose of [false, true]) {
+        const app = launch(true);
+        await app.activate();
+        const pty = app.provider().provideTerminalProfile().options.pty;
+        pty.open({ columns: 80, rows: 24 });
+        pty.handleInput('echo pending\r');
+        pty.setDimensions({ columns: 100, rows: 30 });
+        await new Promise(resolve => setTimeout(resolve, 0));
+        const start = app.messages.find(m => m.type === 'start');
+        if (localClose) pty.close();
+        else {
+            app.host.postMessage({ type: 'error', sessionId: start.sessionId, value: 'Permission denied' });
+            app.host.postMessage({ type: 'exit', sessionId: start.sessionId });
+        }
+        app.host.postMessage({ type: 'ready', sessionId: start.sessionId });
+        await new Promise(resolve => setTimeout(resolve, 0));
+        assert.equal(app.messages.filter(m => m.type === 'input' || m.type === 'resize').length, 0);
+        assert.equal(app.messages.filter(m => m.type === 'close').length, localClose ? 1 : 0);
+        pty.close();
+        app.host.close();
+    }
+});
+
+test('PTY clamps native dimensions and ignores invalid resize values', async () => {
+    const app = launch(true);
+    await app.activate();
+    const pty = app.provider().provideTerminalProfile().options.pty;
+    pty.open({ columns: 80, rows: 24 });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    const start = app.messages.find(m => m.type === 'start');
+    app.host.postMessage({ type: 'ready', sessionId: start.sessionId });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    pty.setDimensions({ columns: 9000, rows: -4 });
+    pty.setDimensions({ columns: NaN, rows: 24 });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    const resizes = app.messages.filter(m => m.type === 'resize');
+    assert.equal(resizes.length, 1);
+    assert.equal(resizes[0].cols, 1000);
+    assert.equal(resizes[0].rows, 1);
+    pty.close();
+    app.host.close();
+});
+
 
 test('Copilot and GitHub authentication still use upstream Code OSS extension hosts', () => {
     const copilot = JSON.parse(readFileSync(
