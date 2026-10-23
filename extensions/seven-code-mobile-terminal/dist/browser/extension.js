@@ -13,6 +13,9 @@ class SevenAndroidPty {
     constructor() {
         this.sessionId = crypto.randomUUID().replace(/-/g, '');
         this.closed = false;
+        this.ready = false;
+        this.pendingInput = [];
+        this.pendingInputBytes = 0;
         this.onDidWriteEmitter = new vscode.EventEmitter();
         this.onDidCloseEmitter = new vscode.EventEmitter();
         this.onDidWrite = this.onDidWriteEmitter.event;
@@ -22,6 +25,13 @@ class SevenAndroidPty {
         this.channel.onmessage = event => {
             const message = event.data;
             if (!message || message.sessionId !== this.sessionId || this.closed) return;
+            if (message.type === 'ready') {
+                this.ready = true;
+                for (const bytes of this.pendingInput) this.postInputBytes(bytes);
+                this.pendingInput = [];
+                this.pendingInputBytes = 0;
+                return;
+            }
             if (message.type === 'data' && typeof message.value === 'string') {
                 try {
                     const bytes = Uint8Array.from(atob(message.value), c => c.charCodeAt(0));
@@ -35,6 +45,8 @@ class SevenAndroidPty {
             }
             if (message.type === 'exit') {
                 this.closed = true;
+                this.pendingInput = [];
+                this.pendingInputBytes = 0;
                 this.onDidWriteEmitter.fire(this.decoder.decode());
                 this.onDidCloseEmitter.fire(typeof message.exitCode === 'number' ? message.exitCode : undefined);
                 this.channel.close();
@@ -53,11 +65,26 @@ class SevenAndroidPty {
             rows: Math.max(1, Math.min(1000, dimensions?.rows || 24)),
         });
     }
-    handleInput(data) {
-        const bytes = encoder.encode(data);
+    postInputBytes(bytes) {
         for (let i = 0; i < bytes.length; i += 48_000) {
             this.send({ type: 'input', data: encode(bytes.subarray(i, i + 48_000)) });
         }
+    }
+    handleInput(data) {
+        if (this.closed) return;
+        const bytes = encoder.encode(data);
+        if (!this.ready) {
+            // Copilot/VS Code can sendText before the Android user approves
+            // the native shell. Never silently lose the command.
+            if (this.pendingInputBytes + bytes.length > 131_072) {
+                this.onDidWriteEmitter.fire('\r\n[Seven Code] Terminal ainda não autorizado: limite da fila de comandos.\r\n');
+                return;
+            }
+            this.pendingInputBytes += bytes.length;
+            this.pendingInput.push(bytes);
+            return;
+        }
+        this.postInputBytes(bytes);
     }
     setDimensions(dimensions) {
         this.send({ type: 'resize', cols: dimensions.columns, rows: dimensions.rows });
@@ -66,6 +93,8 @@ class SevenAndroidPty {
         if (this.closed) return;
         this.send({ type: 'close' });
         this.closed = true;
+        this.pendingInput = [];
+        this.pendingInputBytes = 0;
         this.channel.close();
         this.onDidWriteEmitter.dispose();
         this.onDidCloseEmitter.dispose();
