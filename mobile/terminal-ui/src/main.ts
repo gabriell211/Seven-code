@@ -2,13 +2,17 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import './style.css';
+import { SevenCommandTool, type CommandToolRequest, type CommandToolResult, type CommandToolEvent } from '../../terminal-core/ai-terminal-tool';
 
-interface NativeMessage { type: string; value: string }
+interface NativeMessage { type: string; value?: string; requestId?: string; approved?: boolean; exitCode?: number | null; output?: string; truncated?: boolean; error?: string }
 interface NativeBridge { postMessage(message: string): void }
 declare global {
   interface Window {
     SevenTerminalNative?: NativeBridge;
     sevenNativeEvent?: (message: NativeMessage) => void;
+    SevenCodeTerminalTools?: Readonly<{
+      execute_command: (request: CommandToolRequest) => Promise<CommandToolResult>;
+    }>;
   }
 }
 const terminalElement = document.getElementById('terminal');
@@ -32,6 +36,15 @@ term.loadAddon(fit);
 term.open(terminalElement);
 
 const encoder = new TextEncoder();
+const commandTool = window.SevenTerminalNative ? new SevenCommandTool(window.SevenTerminalNative) : null;
+if (commandTool) {
+  // Trusted host adapter for future Seven Code AI model tool integration.
+  // Android will show a native permission dialog before every command.
+  window.SevenCodeTerminalTools = Object.freeze({
+    execute_command: (request: CommandToolRequest) => commandTool.executeCommand(request)
+  });
+}
+window.addEventListener('pagehide', () => commandTool?.dispose());
 const send = (payload: object) => window.SevenTerminalNative?.postMessage(JSON.stringify(payload));
 const b64 = (bytes: Uint8Array) => {
   let str = '';
@@ -41,8 +54,12 @@ const b64 = (bytes: Uint8Array) => {
 const bytes = (base64: string) => Uint8Array.from(atob(base64), c => c.charCodeAt(0));
 
 window.sevenNativeEvent = (message) => {
-  if (message.type === 'data') term.write(bytes(message.value));
-  if (message.type === 'error') term.writeln('\r\n\x1b[31m' + message.value + '\x1b[0m');
+  if (message.type === 'ai-result') {
+    commandTool?.handleEvent(message as CommandToolEvent);
+    return;
+  }
+  if (message.type === 'data' && message.value) term.write(bytes(message.value));
+  if (message.type === 'error') term.writeln('\r\n\x1b[31m' + (message.value ?? 'Erro') + '\x1b[0m');
   if (message.type === 'exit') term.writeln('\r\n\x1b[33mSessão encerrada\x1b[0m');
 };
 
