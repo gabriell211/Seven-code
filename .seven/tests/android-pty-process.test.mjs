@@ -126,3 +126,64 @@ test('an unapproved queue overflow closes the PTY without executing it', async (
     assert.equal(app.writes.some(w => w.type === 'input'), false);
     app.native.close();
 });
+
+
+test('native PTY preserves split UTF-8 output and ignores duplicate ready events', async () => {
+    const app = openHarness();
+    const proc = new SevenAndroidTerminalProcess(80, 24);
+    const data = [], ready = [];
+    proc.onProcessData(value => data.push(value));
+    proc.onProcessReady(value => ready.push(value));
+    await proc.start();
+    const sessionId = app.writes[0].sessionId;
+    proc.input('echo one\r');
+    app.publish({ type: 'ready', sessionId, pid: 500, cwd: '/data/user/0/dev.seven.code/files' });
+    app.publish({ type: 'ready', sessionId, pid: 500, cwd: '/data/user/0/dev.seven.code/files' });
+    const bytes = Buffer.from('café✅');
+    app.publish({ type: 'data', sessionId, value: bytes.subarray(0, 4).toString('base64') });
+    app.publish({ type: 'data', sessionId, value: bytes.subarray(4).toString('base64') });
+    await flush();
+    assert.equal(ready.length, 1);
+    assert.equal(app.writes.filter(w => w.type === 'input').length, 1);
+    assert.equal(data.join(''), 'café✅');
+    proc.shutdown(true);
+    app.native.close();
+});
+
+test('large terminal input is split into native-safe chunks without data loss', async () => {
+    const app = openHarness();
+    const proc = new SevenAndroidTerminalProcess(80, 24);
+    await proc.start();
+    const sessionId = app.writes[0].sessionId;
+    app.publish({ type: 'ready', sessionId, pid: 431, cwd: '/' });
+    await flush();
+    const payload = 'a'.repeat(98_000);
+    proc.input(payload);
+    const chunks = app.writes.filter(w => w.type === 'input').map(w => Buffer.from(w.data, 'base64'));
+    assert.equal(chunks.length, 3);
+    assert.ok(chunks.every(chunk => chunk.length <= 48000));
+    assert.equal(Buffer.concat(chunks).toString('utf8'), payload);
+    proc.shutdown(true);
+    app.native.close();
+});
+
+test('native terminal session IDs isolate output from other concurrent shells', async () => {
+    const app = openHarness();
+    const left = new SevenAndroidTerminalProcess(80, 24);
+    const right = new SevenAndroidTerminalProcess(80, 24);
+    const leftData = [], rightData = [];
+    left.onProcessData(v => leftData.push(v));
+    right.onProcessData(v => rightData.push(v));
+    await left.start();
+    await right.start();
+    const [leftId, rightId] = app.writes.filter(w => w.type === 'start').map(w => w.sessionId);
+    assert.notEqual(leftId, rightId);
+    app.publish({ type: 'data', sessionId: leftId, value: Buffer.from('LEFT').toString('base64') });
+    app.publish({ type: 'data', sessionId: rightId, value: Buffer.from('RIGHT').toString('base64') });
+    await flush();
+    assert.equal(leftData.join(''), 'LEFT');
+    assert.equal(rightData.join(''), 'RIGHT');
+    left.shutdown(true);
+    right.shutdown(true);
+    app.native.close();
+});
