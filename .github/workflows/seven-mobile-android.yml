@@ -26,6 +26,8 @@ jobs:
           node-version: "24"
       - name: Testar o contrato execute_command
         run: node --experimental-strip-types --test mobile/terminal-core/ai-terminal-tool.test.mjs
+      - name: Verificar todas as áreas do editor móvel
+        run: node --experimental-strip-types --test mobile/capabilities/capability-resolver.test.mjs
       - name: Construir interface xterm.js
         working-directory: mobile/terminal-ui
         run: |

@@ -19,6 +19,17 @@ Object.assign(p,{
   tunnelApplicationName:'seven-code-tunnel',urlProtocol:'seven-code',
   reportIssueUrl:'https://github.com/gabriell211/Seven-code/issues/new'
 });
+// Microsoft Visual Studio Marketplace is not licensed for Code - OSS forks.
+// The vendor-neutral Open VSX registry provides VS Code compatible packages.
+p.extensionsGallery = {
+  serviceUrl: 'https://open-vsx.org/vscode/gallery',
+  itemUrl: 'https://open-vsx.org/vscode/item',
+  resourceUrlTemplate: 'https://open-vsx.org/vscode/unpkg/{publisher}/{name}/{version}/{path}',
+  extensionUrlTemplate: 'https://open-vsx.org/vscode/gallery/{publisher}/{name}/latest'
+};
+p.linkProtectionTrustedDomains = [
+  ...new Set([...(p.linkProtectionTrustedDomains ?? []), 'https://open-vsx.org'])
+];
 save('product.json',p);
 const pkg=json('package.json');pkg.name='seven-code-dev';save('package.json',pkg);
 if(existsSync(path('package-lock.json'))){

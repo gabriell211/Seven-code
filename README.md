@@ -30,3 +30,14 @@ Origem: [microsoft/vscode](https://github.com/microsoft/vscode). O núcleo Code 
 - **Limitações:** a camada que conecta um provedor de IA ao contrato, a integração de todo o editor Code - OSS e o build homologado dos aplicativos móveis ainda não foram concluídos. Veja [arquitetura do terminal](docs/AI-TERMINAL.md).
 
 Build de teste Android: a workflow `seven-mobile-android.yml` valida o TypeScript e tenta gerar `SevenCode-android-debug-apk` como artefato do GitHub Actions. A execução da workflow deve ser conferida antes de declarar o APK funcional.
+
+## Compatibilidade de recursos no celular
+
+**Objetivo:** manter todos os módulos do VS Code disponíveis por meio de um runtime local (Android/iOS) ou de um workspace remoto autenticado. A [matriz de funcionalidades](docs/MOBILE-PARITY.md) descreve cada parte, com critérios de aceitação e limitações. O núcleo [mobile/capabilities](mobile/capabilities) contém um contrato executável para impedir que funcionalidades sem suporte sejam apresentadas como concluídas.
+
+- No Android, a base de terminal local usa PTY/JNI. Isso não equivale a compilar qualquer projeto no dispositivo.
+- No iOS, comandos locais usam bibliotecas embarcadas; funcionalidades que exigem processos arbitrários utilizam ambiente remoto autorizado.
+- Depuração, extensões Node.js, servidores de linguagem, containers, compiladores e ferramentas externas requerem um runtime realmente compatível. A implementação atual ainda **não** fornece um servidor/workspace remoto operacional.
+- As extensões devem ser obtidas de fontes legalmente compatíveis com Code - OSS, como **Open VSX**; o Marketplace da Microsoft não é redistribuível em forks independentes.
+
+> A matriz registra requisitos e testa roteamento. Ela **não** significa que todas as ferramentas já estejam implementadas ou homologadas.

@@ -18,6 +18,8 @@ jobs:
         run: |
           node --check .seven/apply-brand.mjs
           node --test .seven/tests/branding.test.mjs
+          node --experimental-strip-types --test mobile/capabilities/capability-resolver.test.mjs
+          node --experimental-strip-types --test mobile/terminal-core/ai-terminal-tool.test.mjs
           python -m py_compile .seven/render-icons.py
           if [ -f product.json ]; then
             node -e 'const p=require("./product.json");if(p.nameShort!=="Seven Code")process.exit(1)'

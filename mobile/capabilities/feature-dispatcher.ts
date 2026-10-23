@@ -25,10 +25,16 @@ export class FeatureUnavailableError extends Error {
  * no command is dispatched. UI buttons should query the same resolver.
  */
 export class SevenFeatureDispatcher {
+  private readonly environment: () => CapabilityEnvironment;
+  private readonly executors: Readonly<Partial<Record<RuntimeTarget, FeatureExecutor>>>;
+
   constructor(
-    private readonly environment: () => CapabilityEnvironment,
-    private readonly executors: Readonly<Partial<Record<RuntimeTarget, FeatureExecutor>>>
-  ) {}
+    environment: () => CapabilityEnvironment,
+    executors: Readonly<Partial<Record<RuntimeTarget, FeatureExecutor>>>
+  ) {
+    this.environment = environment;
+    this.executors = executors;
+  }
 
   async execute(request: FeatureRequest): Promise<{ readonly target: RuntimeTarget; readonly result: unknown }> {
     if (!/^[a-z][a-zA-Z0-9.]{1,100}$/.test(request.featureId)) {
