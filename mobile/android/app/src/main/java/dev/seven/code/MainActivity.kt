@@ -134,7 +134,7 @@ class MainActivity : Activity() {
         val command = message.optString("command")
         val timeout = message.optLong("timeoutMs", 60_000L)
         if (!id.matches(Regex("[A-Za-z0-9_-]{1,64}")) ||
-            command.isBlank() || command.length > 4096 || command.contains('\\u0000') ||
+            command.isBlank() || command.length > 4096 || command.any { it.code == 0 } ||
             timeout !in 1000L..120_000L) {
             sendAiResult(id, false, null, "", false, "Solicitação inválida")
             return
@@ -146,7 +146,7 @@ class MainActivity : Activity() {
         aiRequestId = id
         AlertDialog.Builder(this)
             .setTitle("Permitir comando da IA?")
-            .setMessage("Comando no terminal local do Android:\\n\\n$command\\n\\n" +
+            .setMessage("Comando no terminal local do Android:\n\n$command\n\n" +
                 "A execução terá as permissões do aplicativo Seven Code.")
             .setCancelable(false)
             .setNegativeButton("Negar") { _, _ ->
