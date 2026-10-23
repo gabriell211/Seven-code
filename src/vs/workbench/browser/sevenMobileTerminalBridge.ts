@@ -36,7 +36,7 @@ if (host && typeof BroadcastChannel !== 'undefined') {
         host.postMessage(JSON.stringify(data));
     };
     window.sevenNativeEvent = event => {
-        if (event && ['data', 'error', 'exit'].includes(event.type) &&
+        if (event && ['ready', 'data', 'error', 'exit'].includes(event.type) &&
             typeof event.sessionId === 'string' && /^[a-zA-Z0-9_-]{1,64}$/.test(event.sessionId)) {
             channel.postMessage(event);
         }
