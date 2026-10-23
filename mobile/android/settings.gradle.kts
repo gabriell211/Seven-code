@@ -13,4 +13,4 @@ dependencyResolutionManagement {
     }
 }
 rootProject.name = "SevenCodeAndroid"
-include(":terminal")
+include(":terminal", ":app")
