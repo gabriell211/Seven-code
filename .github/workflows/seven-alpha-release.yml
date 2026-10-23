@@ -90,6 +90,10 @@ jobs:
         run: |
           cd release-assets
           sha256sum *.apk *.zip > SHA256SUMS.txt
+      - name: Block publication without real full-stack E2E proof
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node .seven/require-release-checks.mjs
       - name: Publish verified prerelease
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

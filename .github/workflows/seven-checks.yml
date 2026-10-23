@@ -23,6 +23,7 @@ jobs:
           node --experimental-strip-types --test mobile/terminal-core/ai-terminal-tool.test.mjs
           node --experimental-strip-types --test mobile/remote/seven-workspace-client.test.mjs
           node --test .seven/tests/mobile-workbench.test.mjs
+          node --test .seven/tests/release-qualification.test.mjs
           python -m py_compile .seven/render-icons.py
           if [ ! -f product.json ] || [ ! -f src/vs/workbench/workbench.desktop.main.ts ]; then
             echo "::error::A importação do Code - OSS ainda não foi concluída."
