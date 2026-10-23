@@ -9,7 +9,7 @@ Todas as áreas do VS Code devem existir na experiência Seven Code para Android
 - **Local UI:** editor, abas, navegação, busca, preferências, temas, diffs e extensões compatíveis com browser.
 - **Android native:** armazenamento no sandbox, teclado, PTY/shell Android e adaptadores nativos explicitamente homologados.
 - **iOS native:** Files/iCloud e comandos embarcados, sem tentar executar binários Unix arbitrários fora do sandbox.
-- **Remote workspace:** ambiente Seven Code Server em Linux/macOS/Windows ou container autorizado para runtimes/compiladores, Git CLI, debugging, testes, language servers, plugins Node.js e tarefas avançadas.
+- **Remote workspace:** servidor de workspace original do Code OSS em Linux/macOS/Windows ou container autorizado para runtimes/compiladores, Git CLI, debugging, testes, language servers, plugins Node.js e tarefas avançadas.
 - **Off-line:** o editor e os recursos locais confirmados continuam disponíveis, mas builds remotos, depuração remota e extensões de servidor **não** fingem funcionar sem conexão.
 
 A feature catalog declarativa [feature-catalog.ts](../mobile/capabilities/feature-catalog.ts) enumera requisitos individualmente. [capability-resolver.ts](../mobile/capabilities/capability-resolver.ts) só retorna `available` se um host local integrado ou workspace remoto autenticado anunciar suporte real. [feature-dispatcher.ts](../mobile/capabilities/feature-dispatcher.ts) encaminha operações exclusivamente ao executor correspondente, sem simular resultados.
@@ -56,7 +56,7 @@ A feature catalog declarativa [feature-catalog.ts](../mobile/capabilities/featur
 
 **Comunicação com nativos:** implementar ponte para filesystem Android/iOS, seleção Files/iCloud, PTY, shell local e controle de sessão para retomada.
 
-**Gateway remoto:** cliente WebSocket e testes de handshake em `mobile/remote/` já versionados; ainda é preciso criar Seven Code Server compatível com extensão Node host, terminal, LSP, DAP, Git, testes e APIs de arquivos. Usar TLS e sessão com autenticação + autorização por workspace. Nunca utilizar credenciais persistentes em mensagens WebView.
+**Gateway remoto:** cliente WebSocket e testes de handshake em `mobile/remote/` já versionados; usar o servidor e extension host upstream do Code OSS (sem implementar servidor próprio), mantendo versões compatíveis; ainda é necessário validar autenticação, implantação e operações de terminal, LSP, DAP, Git, testes e APIs de arquivos. Usar TLS e sessão com autenticação + autorização por workspace. Nunca utilizar credenciais persistentes em mensagens WebView.
 
 **Experiência completa:** passar cada feature catalog para estado `available` somente depois de compilar, usar e provar em E2E. Adicionar screenshots e logs nos PRs e GitHub Actions; manter matriz gerada e revisável.
 
