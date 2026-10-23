@@ -27,6 +27,7 @@ import './browser/parts/dialogs/dialog.web.contribution.js';
 
 //#region --- workbench (web main)
 
+import './browser/sevenMobileTerminalBridge.js';
 import './browser/web.main.js';
 
 //#endregion
