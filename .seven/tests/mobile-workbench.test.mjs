@@ -269,3 +269,18 @@ test('terminal API command reaches the mobile PTY after simulated Android approv
     assert.equal(exitCode, 0, 'Native exit status should be returned to the editor');
     app.host.close();
 });
+
+
+test('mobile routes ordinary and extension-created terminals through trusted native ITerminalChildProcess', () => {
+    const service = readFileSync(join(process.cwd(), 'src/vs/workbench/contrib/terminal/browser/terminalService.ts'), 'utf8');
+    const process = readFileSync(join(process.cwd(), 'src/vs/workbench/contrib/terminal/browser/sevenAndroidTerminalProcess.ts'), 'utf8');
+    const native = readFileSync(join(process.cwd(), 'mobile/android/app/src/main/java/dev/seven/code/MainActivity.kt'), 'utf8');
+    assert.match(service, /hasSevenAndroidTerminal\(\)/);
+    assert.match(service, /shellLaunchConfig\.customPtyImplementation = .*SevenAndroidTerminalProcess/);
+    assert.match(process, /implements ITerminalChildProcess/);
+    assert.match(process, /onProcessReady/);
+    assert.match(process, /onProcessExit/);
+    assert.match(process, /MAX_PENDING_INPUT = 131072/);
+    assert.match(native, /"pid", pty\.shellPid\(\)/);
+    assert.match(native, /"cwd", filesDir\.canonicalPath/);
+});

@@ -41,6 +41,8 @@ class SevenPty(
     private var ptyDescriptor: Int = -1
     private var processId: Int = -1
 
+    fun shellPid(): Int = processId
+
     @Synchronized
     @Throws(IOException::class)
     fun start(columns: Int = 80, rows: Int = 24, workspace: File = context.filesDir) {

@@ -217,7 +217,10 @@ class MainActivity : Activity() {
                                 )
                                 pty.start(cols, rows)
                                 sessions[sessionId] = pty
-                                sendEvent("ready", sessionId)
+                                sendPayload(JSONObject().put("type", "ready")
+                                    .put("sessionId", sessionId)
+                                    .put("pid", pty.shellPid())
+                                    .put("cwd", filesDir.canonicalPath))
                             } catch (error: Exception) {
                                 sendEvent("error", sessionId, error.message ?: "Falha ao abrir shell")
                                 sendEvent("exit", sessionId)

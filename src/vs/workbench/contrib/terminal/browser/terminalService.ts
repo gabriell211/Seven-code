@@ -20,7 +20,7 @@ import { IContextKey, IContextKeyService } from '../../../../platform/contextkey
 import { IDialogService } from '../../../../platform/dialogs/common/dialogs.js';
 import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
 import { INotificationService } from '../../../../platform/notification/common/notification.js';
-import { ICreateContributedTerminalProfileOptions, IExtensionTerminalProfile, IPtyHostAttachTarget, IRawTerminalInstanceLayoutInfo, IRawTerminalTabLayoutInfo, IShellLaunchConfig, ITerminalBackend, ITerminalLaunchError, ITerminalLogService, ITerminalsLayoutInfo, ITerminalsLayoutInfoById, TerminalExitReason, TerminalLocation, TerminalSettingId, TitleEventSource } from '../../../../platform/terminal/common/terminal.js';
+import { ICreateContributedTerminalProfileOptions, IExtensionTerminalProfile, IPtyHostAttachTarget, IRawTerminalInstanceLayoutInfo, IRawTerminalTabLayoutInfo, IShellLaunchConfig, ITerminalBackend, ITerminalLaunchError, ITerminalLogService, ITerminalsLayoutInfo, ITerminalsLayoutInfoById, TerminalExitReason, TerminalLocation, TerminalSettingId, TitleEventSource, remoteResolverTerminal } from '../../../../platform/terminal/common/terminal.js';
 import { formatMessageForTerminal } from '../../../../platform/terminal/common/terminalStrings.js';
 import { iconForeground } from '../../../../platform/theme/common/colorRegistry.js';
 import { getIconRegistry } from '../../../../platform/theme/common/iconRegistry.js';
@@ -57,6 +57,7 @@ import { isAuxiliaryWindow, mainWindow } from '../../../../base/browser/window.j
 import { GroupIdentifier } from '../../../common/editor.js';
 import { getActiveWindow } from '../../../../base/browser/dom.js';
 import { hasKey, isString } from '../../../../base/common/types.js';
+import { hasSevenAndroidTerminal, SevenAndroidTerminalProcess } from './sevenAndroidTerminalProcess.js';
 
 interface IBackgroundTerminal {
 	instance: ITerminalInstance;
@@ -1003,6 +1004,23 @@ export class TerminalService extends Disposable implements ITerminalService {
 			config = this._terminalProfileService.getDefaultProfile();
 		}
 		const shellLaunchConfig = config && hasKey(config, { extensionIdentifier: true }) ? {} : this._terminalInstanceService.convertProfileToShellLaunchConfig(config || {});
+
+		// Android-only transport: keep the original terminal instance, lifecycle and
+		// extension APIs, but execute shell commands in the on-device PTY.
+		// The remote resolver and extension-provided custom PTYs are not replaced.
+		if (isWeb && hasSevenAndroidTerminal() &&
+			!shellLaunchConfig.customPtyImplementation &&
+			!shellLaunchConfig.attachPersistentProcess &&
+			!shellLaunchConfig[remoteResolverTerminal] &&
+			!(config && hasKey(config, { extensionIdentifier: true }))) {
+			shellLaunchConfig.customPtyImplementation = (_id, cols, rows) => new SevenAndroidTerminalProcess(cols, rows);
+			shellLaunchConfig.executable = undefined;
+			shellLaunchConfig.args = undefined;
+			shellLaunchConfig.cwd = undefined;
+			shellLaunchConfig.ignoreShellIntegration = true;
+			shellLaunchConfig.name ??= 'Android • Seven Code';
+		}
+
 
 		// Get the contributed profile if it was provided
 		const contributedProfile = options?.skipContributedProfileCheck ? undefined : await this._getContributedProfile(shellLaunchConfig, options);

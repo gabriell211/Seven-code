@@ -7,6 +7,8 @@ interface SevenMobileEvent {
     sessionId?: string;
     value?: string;
     exitCode?: number | null;
+    pid?: number;
+    cwd?: string;
 }
 declare global {
     interface Window {

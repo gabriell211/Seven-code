@@ -6,6 +6,9 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/seven-web-server.yml"
+      - "src/vs/workbench/contrib/terminal/browser/terminalService.ts"
+      - "src/vs/workbench/contrib/terminal/browser/sevenAndroidTerminalProcess.ts"
+      - "src/vs/workbench/browser/sevenMobileTerminalBridge.ts"
 
 permissions:
   contents: read
