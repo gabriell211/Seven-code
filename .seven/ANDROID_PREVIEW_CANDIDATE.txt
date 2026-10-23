@@ -1,0 +1,4 @@
+Seven Code Android preview candidate v0.2.0-android-preview.1
+This source snapshot can only be published after Android JNI instrumented tests,
+APK packaging inspection and a compiled/authenticated Code OSS Chromium E2E pass.
+The result is a server-dependent developer preview, not a standalone IDE.
