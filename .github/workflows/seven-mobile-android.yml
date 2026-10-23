@@ -15,6 +15,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: seven-code-android-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   mobile:
     runs-on: ubuntu-latest
@@ -53,6 +57,10 @@ jobs:
           sdkmanager "platforms;android-36" "build-tools;36.0.0" "cmake;3.22.1" "ndk;27.2.12479018"
       - name: Compilar APK de testes (não assinado para distribuição)
         run: gradle -p mobile/android :app:assembleDebug --no-daemon --stacktrace
+      - name: Habilitar KVM para testes reais no emulador
+        run: |
+          test -e /dev/kvm || { echo '::error::Hosted runner has no KVM; real emulator test cannot pass'; exit 1; }
+          sudo chmod 666 /dev/kvm
       - name: Executar PTY JNI no emulador Android (não é E2E do editor completo)
         uses: reactivecircus/android-emulator-runner@v2
         with:
