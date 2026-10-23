@@ -40,6 +40,7 @@ class MainActivity : Activity() {
     private var aiRequestId: String? = null
     private val sessionPattern = Regex("[A-Za-z0-9_-]{1,64}")
     private var showingConnectionError = false
+    private var workbenchActive = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -62,9 +63,14 @@ class MainActivity : Activity() {
     }
 
     private fun showServerSetup(error: String? = null) {
-        // The abandoned WebView must no longer execute native shell sessions.
+        // Revoke bridge access before leaving the trusted workbench screen.
+        workbenchActive = false
+        trustedOrigin = ""
         closeWorkbenchTerminals()
-        if (::webView.isInitialized) webView.stopLoading()
+        if (::webView.isInitialized) {
+            webView.stopLoading()
+            webView.loadUrl("about:blank")
+        }
         val layout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             val pad = (24 * resources.displayMetrics.density).toInt()
@@ -108,7 +114,9 @@ class MainActivity : Activity() {
 
     private fun openWorkbench(url: String) {
         val parsed = parseWorkbenchUrl(url) ?: return showServerSetup("URL inválida")
-        trustedOrigin = parsed.first
+        // Stop authorization for the old web document before replacing its WebView.
+        workbenchActive = false
+        closeWorkbenchTerminals()
         if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
             setContentView(TextView(this).apply {
                 text = "Atualize o Android System WebView para usar o Seven Code."
@@ -117,6 +125,7 @@ class MainActivity : Activity() {
         }
         // Do not retain a disconnected WebView when changing the trusted server.
         val previousWebView = if (::webView.isInitialized) webView else null
+        trustedOrigin = parsed.first
         webView = WebView(this)
         webView.settings.apply {
             javaScriptEnabled = true
@@ -181,16 +190,20 @@ class MainActivity : Activity() {
         }
         WebViewCompat.addWebMessageListener(
             webView, "SevenTerminalNative", setOf(trustedOrigin)
-        ) { _, message, sourceOrigin, isMainFrame, _ ->
-            if (!isMainFrame || sourceOrigin.toString() != trustedOrigin) return@addWebMessageListener
+        ) { senderView, message, sourceOrigin, isMainFrame, _ ->
+            if (!workbenchActive || senderView !== webView || !isMainFrame ||
+                sourceOrigin.toString() != trustedOrigin) return@addWebMessageListener
             val raw = message.data ?: return@addWebMessageListener
             if (raw.length > 100_000) return@addWebMessageListener
-            runOnUiThread { handleMessage(raw) }
+            runOnUiThread {
+                if (workbenchActive && senderView === webView) handleMessage(raw)
+            }
         }
         setContentView(webView)
         previousWebView?.stopLoading()
         previousWebView?.destroy()
         showingConnectionError = false
+        workbenchActive = true
         webView.loadUrl(parsed.second)
     }
 
@@ -218,6 +231,7 @@ class MainActivity : Activity() {
     }
 
     private fun handleMessage(raw: String) {
+        if (!workbenchActive) return
         try {
             val data = JSONObject(raw)
             if (data.optString("type") == "ai-propose") {
@@ -372,10 +386,10 @@ class MainActivity : Activity() {
     }
 
     private fun sendPayload(payload: JSONObject) {
-        if (!::webView.isInitialized) return
+        if (!workbenchActive || !::webView.isInitialized) return
         val encoded = payload.toString()
         runOnUiThread {
-            if (!isFinishing && !isDestroyed) {
+            if (!isFinishing && !isDestroyed && workbenchActive) {
                 webView.evaluateJavascript("window.sevenNativeEvent?.($encoded)", null)
             }
         }
@@ -396,6 +410,7 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
+        workbenchActive = false
         closeWorkbenchTerminals()
         aiRunner?.cancel()
         aiRunner = null
