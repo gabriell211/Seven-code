@@ -1,0 +1,48 @@
+name: Seven Code iOS workbench build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "mobile/ios/**"
+      - ".github/workflows/seven-ios.yml"
+  pull_request:
+    paths:
+      - "mobile/ios/**"
+      - ".github/workflows/seven-ios.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: seven-ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  simulator:
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate Xcode project
+        run: xcodegen generate --spec mobile/ios/project.yml --project mobile/ios
+      - name: Compile iOS simulator application
+        run: |
+          xcodebuild -project mobile/ios/SevenCode.xcodeproj \
+            -scheme SevenCode -configuration Debug \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/seven-code-ios" \
+            CODE_SIGNING_ALLOWED=NO build
+      - name: Archive simulator test application
+        run: |
+          ditto -c -k --sequesterRsrc --keepParent \
+            "$RUNNER_TEMP/seven-code-ios/Build/Products/Debug-iphonesimulator/SevenCode.app" \
+            "$RUNNER_TEMP/SevenCode-iOS-Simulator.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SevenCode-iOS-Simulator
+          path: ${{ runner.temp }}/SevenCode-iOS-Simulator.zip
+          if-no-files-found: error
