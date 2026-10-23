@@ -1,0 +1,63 @@
+name: Importar Code OSS
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/import-code-oss.yml"
+      - ".seven/**"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: seven-code-bootstrap
+  cancel-in-progress: false
+
+jobs:
+  importar:
+    if: github.repository == 'gabriell211/Seven-code'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Importar fonte original MIT
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -f product.json ]; then
+            upstream="$RUNNER_TEMP/code-oss-upstream"
+            git clone --depth 1 --filter=blob:none --single-branch --branch main https://github.com/microsoft/vscode.git "$upstream"
+            git -C "$upstream" rev-parse HEAD > .seven/UPSTREAM_COMMIT
+            rsync -a --exclude=.git --exclude=.github --exclude=.seven --exclude=README.md "$upstream/" "./"
+          fi
+          test -f LICENSE.txt
+          test -f ThirdPartyNotices.txt
+          test -f product.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Criar ícones exclusivos
+        run: |
+          python -m pip install --disable-pip-version-check pillow cairosvg
+          python .seven/render-icons.py
+      - name: Aplicar marca e tema
+        run: node .seven/apply-brand.mjs
+      - name: Validar
+        run: |
+          node --check .seven/apply-brand.mjs
+          python -m py_compile .seven/render-icons.py
+          node --test .seven/tests/branding.test.mjs
+          node -e 'const p=require("./product.json");if(p.nameShort!=="Seven Code"||p.applicationName!=="seven-code")process.exit(1)'
+          test -f resources/win32/code.ico
+          test -f resources/darwin/code.icns
+      - name: Enviar fonte e personalização para main
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -m "feat: import Code OSS and apply Seven Code branding"
+            git push origin HEAD:main
+          fi
