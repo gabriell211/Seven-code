@@ -233,7 +233,7 @@ test('terminal API command reaches the mobile PTY after simulated Android approv
     const browserBridge = readFileSync(
         join(process.cwd(), 'src/vs/workbench/browser/sevenMobileTerminalBridge.ts'), 'utf8'
     );
-    assert.match(nativeActivity, /sendEvent\("ready", sessionId\)/);
+    assert.match(nativeActivity, /sendPayload\(JSONObject\(\)\.put\("type", "ready"\)/);
     assert.match(nativeActivity, /SevenPty\(this/);
     assert.match(browserBridge, /'ready', 'data', 'error', 'exit'/);
 
