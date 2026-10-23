@@ -15,8 +15,6 @@ android {
         versionName = "0.1.0"
     }
 
-    sourceSets.getByName("main").assets.srcDir("../../terminal-ui/dist")
-
     buildTypes {
         release {
             isMinifyEnabled = false
