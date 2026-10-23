@@ -62,6 +62,9 @@ class MainActivity : Activity() {
     }
 
     private fun showServerSetup(error: String? = null) {
+        // The abandoned WebView must no longer execute native shell sessions.
+        closeWorkbenchTerminals()
+        if (::webView.isInitialized) webView.stopLoading()
         val layout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             val pad = (24 * resources.displayMetrics.density).toInt()
@@ -196,7 +199,7 @@ class MainActivity : Activity() {
         showingConnectionError = true
         AlertDialog.Builder(this)
             .setTitle("Não foi possível abrir o Seven Code")
-            .setMessage(reason + "\\n\\nO aplicativo precisa do servidor Code OSS original " +
+            .setMessage(reason + "\n\nO aplicativo precisa do servidor Code OSS original " +
                 "em uma conexão HTTPS autenticada.")
             .setPositiveButton("Tentar novamente") { _, _ ->
                 if (::webView.isInitialized) webView.reload()
