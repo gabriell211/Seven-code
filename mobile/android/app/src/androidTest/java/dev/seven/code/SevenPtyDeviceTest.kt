@@ -42,7 +42,7 @@ class SevenPtyDeviceTest {
         try {
             pty.start(80, 24)
             pty.resize(100, 32)
-            pty.write("printf 'SEVEN_DEVICE_PTY_OK\\n'\n".toByteArray(StandardCharsets.UTF_8))
+            pty.write("printf 'SEVEN_%s_PTY_OK\\n' DEVICE\n".toByteArray(StandardCharsets.UTF_8))
             assertTrue("Shell did not return the marker within 20 seconds", signal.await(20, TimeUnit.SECONDS))
             assertTrue("PTY error: " + failure.get(), failure.get() == null)
             assertTrue("Missing real PTY output", synchronized(received) { received.contains(expected) })
