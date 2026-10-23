@@ -3,6 +3,8 @@ package dev.seven.code
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.seven.code.terminal.SevenPty
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -46,6 +48,28 @@ class SevenPtyDeviceTest {
             assertTrue("Missing real PTY output", synchronized(received) { received.contains(expected) })
         } finally {
             pty.close()
+        }
+    }
+
+
+    @Test
+    fun nativeAiCommandRunnerReportsRealOutputAndExitStatus() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val completed = CountDownLatch(1)
+        val result = AtomicReference<AiTerminalResult>()
+        val runner = SevenAiCommandRunner(
+            context,
+            onComplete = { response -> result.set(response); completed.countDown() }
+        )
+        try {
+            runner.execute("printf 'SEVEN_AI_NATIVE_OK\\n'", 20_000)
+            assertTrue("AI PTY command timed out", completed.await(30, TimeUnit.SECONDS))
+            val response = result.get() ?: throw AssertionError("Missing native command result")
+            assertNull("Native command failed: " + response.error, response.error)
+            assertEquals("Wrong shell exit code", 0, response.exitCode)
+            assertTrue("Missing shell stdout", response.output.contains("SEVEN_AI_NATIVE_OK"))
+        } finally {
+            runner.cancel()
         }
     }
 
