@@ -35,6 +35,7 @@ jobs:
       - name: Testar cliente de workspace remoto seguro
         run: node --experimental-strip-types --test mobile/remote/seven-workspace-client.test.mjs
           node --test .seven/tests/mobile-workbench.test.mjs
+          node --test .seven/tests/android-pty-process.test.mjs
       - name: Construir interface xterm.js
         working-directory: mobile/terminal-ui
         run: |
