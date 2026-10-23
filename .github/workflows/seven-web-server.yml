@@ -35,6 +35,7 @@ jobs:
       - name: Install Code OSS upstream dependencies
         run: |
           test -s .github/copilot-instructions.md
+          test -s extensions/copilot/.github/copilot-instructions.md
           test -d .agents/skills
           npm ci --no-audit --no-fund
       - name: Package full upstream web server with web workbench and extension host

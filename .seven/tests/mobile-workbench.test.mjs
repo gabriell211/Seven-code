@@ -219,21 +219,20 @@ test('Copilot and GitHub authentication still use upstream Code OSS extension ho
     assert.equal(typeof auth.browser, 'string', 'GitHub login still has a browser extension entrypoint');
     assert.match(browserHost, /RemoteExtensions|RemoteExtensionHost|RemoteRunningLocation|RemoteAgentService/);
     assert.equal(packageJson.name, 'seven-code-mobile-terminal', 'Mobile must only replace the terminal adapter');
-});
-
-test('Copilot command passes through original VS Code terminal API after Android approval', async () => {
-    // Copilot source uses the public VS Code terminal API. Test the real mobile
-    // Pseudoterminal adapter without modifying GitHub Copilot internals.
     const copilotAdapter = readFileSync(
         join(process.cwd(), 'extensions/copilot/src/platform/terminal/vscode/terminalServiceImpl.ts'), 'utf8'
     );
+    assert.match(copilotAdapter, /window\.createTerminal\(name, shellPath, shellArgs\)/);
+});
+
+test('terminal API command reaches the mobile PTY after simulated Android approval', async () => {
+    // Exercise the mobile adapter directly; native permission and output are simulated.
     const nativeActivity = readFileSync(
         join(process.cwd(), 'mobile/android/app/src/main/java/dev/seven/code/MainActivity.kt'), 'utf8'
     );
     const browserBridge = readFileSync(
         join(process.cwd(), 'src/vs/workbench/browser/sevenMobileTerminalBridge.ts'), 'utf8'
     );
-    assert.match(copilotAdapter, /window\.createTerminal\(name, shellPath, shellArgs\)/);
     assert.match(nativeActivity, /sendEvent\("ready", sessionId\)/);
     assert.match(nativeActivity, /SevenPty\(this/);
     assert.match(browserBridge, /'ready', 'data', 'error', 'exit'/);
@@ -246,9 +245,8 @@ test('Copilot command passes through original VS Code terminal API after Android
     pty.onDidWrite(text => chunks.push(text));
     pty.onDidClose(code => { exitCode = code; });
     pty.open({ columns: 80, rows: 24 });
-    // Copilot sends a command as if through VS Code's Terminal.sendText,
-    // before native permission was granted by the Android user.
-    pty.handleInput('printf "copilot-native-ok\\n"\\r');
+    // Model Terminal.sendText before native permission has been granted.
+    pty.handleInput('printf "copilot-native-ok\\n"\r');
     await new Promise(resolve => setTimeout(resolve, 0));
     const started = app.messages.find(m => m.type === 'start');
     assert.ok(started, 'A native session must be requested');
@@ -258,16 +256,16 @@ test('Copilot command passes through original VS Code terminal API after Android
     app.host.postMessage({ type: 'ready', sessionId: started.sessionId });
     await new Promise(resolve => setTimeout(resolve, 0));
     const inputs = app.messages.filter(m => m.type === 'input');
-    assert.equal(inputs.length, 1, 'Copilot command must be flushed once, never dropped or duplicated');
+    assert.equal(inputs.length, 1, 'Queued command must be flushed once, never dropped or duplicated');
     assert.equal(new TextDecoder().decode(Uint8Array.from(
         atob(inputs[0].data), c => c.charCodeAt(0)
-    )), 'printf "copilot-native-ok\\n"\\r');
+    )), 'printf "copilot-native-ok\\n"\r');
 
     app.host.postMessage({ type: 'data', sessionId: started.sessionId,
-        value: btoa('copilot-native-ok\\r\\n') });
+        value: btoa('copilot-native-ok\r\n') });
     app.host.postMessage({ type: 'exit', sessionId: started.sessionId, exitCode: 0 });
     await new Promise(resolve => setTimeout(resolve, 0));
-    assert.ok(chunks.join('').includes('copilot-native-ok'), 'Copilot terminal buffer should receive stdout');
+    assert.equal(chunks.join(''), 'copilot-native-ok\r\n', 'Terminal buffer should receive stdout with CRLF');
     assert.equal(exitCode, 0, 'Native exit status should be returned to the editor');
     app.host.close();
 });

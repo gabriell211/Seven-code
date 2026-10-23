@@ -32,7 +32,7 @@ jobs:
             upstream="$RUNNER_TEMP/code-oss-upstream"
             git clone --depth 1 --filter=blob:none --single-branch --branch main https://github.com/microsoft/vscode.git "$upstream"
             git -C "$upstream" rev-parse HEAD > .seven/UPSTREAM_COMMIT
-            rsync -a --exclude=.git --exclude=.github --exclude=.seven --exclude=README.md "$upstream/" "./"
+            rsync -a --exclude=.git --exclude=/.github --exclude=.seven --exclude=README.md "$upstream/" "./"
             # npm postinstall links this canonical upstream file into .claude.
             install -Dm644 "$upstream/.github/copilot-instructions.md" .github/copilot-instructions.md
           fi
@@ -40,6 +40,7 @@ jobs:
           test -f ThirdPartyNotices.txt
           test -f product.json
           test -s .github/copilot-instructions.md
+          test -s extensions/copilot/.github/copilot-instructions.md
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"

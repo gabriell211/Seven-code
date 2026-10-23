@@ -84,7 +84,7 @@ try {
 	console.error(output.replaceAll(token, '<redacted>'));
 	throw error;
 } finally {
-	if (server.exitCode === null && server.signalCode === null) {
+	if (server.pid !== undefined && server.exitCode === null && server.signalCode === null) {
 		const exited = once(server, 'exit');
 		server.kill('SIGTERM');
 		const forceKill = setTimeout(() => server.kill('SIGKILL'), 5_000);

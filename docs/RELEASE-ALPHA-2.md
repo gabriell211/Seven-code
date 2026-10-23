@@ -17,7 +17,13 @@ O tamanho do APK **não** mede o tamanho do editor: o Code OSS original é servi
 
 As APIs de terminal e Copilot do Code OSS permanecem originais. No Android, `Android (Seven Code)` é um perfil de terminal que redireciona bytes ao PTY do aplicativo. O comando iniciado antes da aprovação do shell nativo fica em fila até que o host envie `ready`, evitando perder a entrada durante o diálogo de permissão.
 
-A suíte de testes simula o caminho Copilot/API terminal original → Pseudoterminal → autorização Android → comando → saída e código de encerramento; **não é uma homologação real de uma conta GitHub Copilot**. O Copilot original ainda depende de um host remoto Node.js compatível, autenticação, assinatura/autorização e E2E em aparelhos reais. Um terminal de workspace remoto executará os comandos no **servidor**, não no celular.
+A suíte de testes exercita diretamente o adaptador Pseudoterminal → autorização Android simulada → comando → saída e código de encerramento; **não é uma homologação real de uma conta GitHub Copilot nem do roteamento automático de suas ferramentas**. O Copilot original ainda depende de um host remoto Node.js compatível, autenticação, assinatura/autorização e E2E em aparelhos reais. Um terminal de workspace remoto executará os comandos no **servidor**, não no celular.
+
+**Copilot no terminal Android ainda pendente:** escolher o perfil Android permite abrir terminais locais manualmente, mas não redireciona automaticamente `window.createTerminal` nem a ferramenta `run_in_terminal`. O resolvedor original ignora perfis contribuídos nesses fluxos. Ainda é necessário integrar esse roteamento na camada de terminal e a integração do shell, mantendo a autorização nativa e as APIs do Copilot originais.
+
+O adaptador preserva o último redimensionamento durante a autorização e o aplica antes dos comandos em fila. Fechar a aba ou cancelar a autorização descarta a solicitação pendente, evitando iniciar um shell sem terminal associado. Recarregar o editor encerra as sessões anteriores e descarta seus eventos atrasados.
+
+A publicação exige iniciar o servidor compilado, conferir o commit, rejeitar acesso sem autenticação e carregar o HTML do workbench e os arquivos dos hosts de extensão via HTTP local autenticado. Essa verificação não substitui os testes visuais do editor nem a autenticação real do Copilot.
 
 ## Uso e segurança
 

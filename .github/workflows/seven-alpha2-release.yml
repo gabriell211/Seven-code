@@ -94,6 +94,7 @@ jobs:
       - name: Install exact Code OSS dependencies
         run: |
           test -s .github/copilot-instructions.md
+          test -s extensions/copilot/.github/copilot-instructions.md
           test -d .agents/skills
           npm ci --no-audit --no-fund
       - name: Compile complete Code OSS server, web workbench and extension hosts

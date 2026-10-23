@@ -2,6 +2,7 @@ package dev.seven.code
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Bundle
 import android.util.Base64
@@ -30,6 +31,7 @@ class MainActivity : Activity() {
     private lateinit var webView: WebView
     private val sessions = mutableMapOf<String, SevenPty>()
     private val pendingSessions = mutableMapOf<String, AlertDialog>()
+    private var terminalGeneration = 0
     private var trustedOrigin: String = ""
     private var aiRunner: SevenAiCommandRunner? = null
     private var aiRequestId: String? = null
@@ -117,6 +119,11 @@ class MainActivity : Activity() {
             safeBrowsingEnabled = true
         }
         webView.webViewClient = object : WebViewClient() {
+            override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
+                // A replaced document cannot own the previous workbench's sessions.
+                closeWorkbenchTerminals()
+            }
+
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                 if (!request.isForMainFrame) return false
                 val uri = request.url
@@ -183,15 +190,28 @@ class MainActivity : Activity() {
                                 return@setPositiveButton
                             }
                             try {
+                                val generation = terminalGeneration
                                 val pty = SevenPty(this,
                                     onData = { bytes ->
-                                        sendEvent("data", sessionId, Base64.encodeToString(bytes, Base64.NO_WRAP))
+                                        runOnUiThread {
+                                            if (generation == terminalGeneration) {
+                                                sendEvent("data", sessionId, Base64.encodeToString(bytes, Base64.NO_WRAP))
+                                            }
+                                        }
                                     },
-                                    onError = { error -> sendEvent("error", sessionId, error.message ?: "Erro PTY") },
+                                    onError = { error ->
+                                        runOnUiThread {
+                                            if (generation == terminalGeneration) {
+                                                sendEvent("error", sessionId, error.message ?: "Erro PTY")
+                                            }
+                                        }
+                                    },
                                     onExit = { code ->
                                         runOnUiThread {
-                                            sessions.remove(sessionId)
-                                            sendEvent("exit", sessionId, exitCode = code)
+                                            if (generation == terminalGeneration) {
+                                                sessions.remove(sessionId)
+                                                sendEvent("exit", sessionId, exitCode = code)
+                                            }
                                         }
                                     }
                                 )
@@ -304,13 +324,19 @@ class MainActivity : Activity() {
         sendPayload(JSONObject().put("type", type).put("value", value))
     }
 
-    override fun onDestroy() {
+    private fun closeWorkbenchTerminals() {
+        terminalGeneration++
         pendingSessions.values.toList().forEach { it.dismiss() }
         pendingSessions.clear()
+        val previousSessions = sessions.values.toList()
+        sessions.clear()
+        previousSessions.forEach { it.close() }
+    }
+
+    override fun onDestroy() {
+        closeWorkbenchTerminals()
         aiRunner?.cancel()
         aiRunner = null
-        sessions.values.toList().forEach { it.close() }
-        sessions.clear()
         if (::webView.isInitialized) webView.destroy()
         super.onDestroy()
     }
