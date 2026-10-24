@@ -1,0 +1,79 @@
+name: Seven Code Android - Copilot ELF ABI compatibility research
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/seven-copilot-android-abi.yml"
+      - ".seven/android/experimental-glibc/**"
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  abi-probe:
+    name: Probe original Copilot ARM64 glibc native ABI against Android/Bionic
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: android-actions/setup-android@v4
+      - name: Install NDK and ELF diagnostic tools
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "ndk;27.2.12479018"
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq binutils
+      - name: Obtain compiled original Copilot native runtime as immutable CI input
+        uses: actions/download-artifact@v4
+        with:
+          name: SevenCode-CodeOSS-linux-arm64-build
+          run-id: 40052793301
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/upstream
+      - name: Inspect real proprietary Copilot runtime ABI (no fake native binary)
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/codeoss"
+          tar xf "$RUNNER_TEMP/upstream/SevenCode-CodeOSS-linux-arm64-build.tar.gz" -C "$RUNNER_TEMP/codeoss"
+          root="$RUNNER_TEMP/codeoss/vscode-reh-web-linux-arm64"
+          test -s "$root/extensions/copilot/dist/extension.js"
+          test -s "$root/extensions/copilot/node_modules/@github/copilot/sdk/prebuilds/linux-arm64/runtime.node"
+          test -s "$root/extensions/copilot/node_modules/@github/copilot/sdk/prebuilds/linux-arm64/cli-native.node"
+          test -s "$root/node_modules/@github/copilot-sdk-linux-arm64/prebuilds/linux-arm64/runtime.node"
+          test -s "$root/node_modules/@github/copilot-sdk-linux-arm64/prebuilds/linux-arm64/copilot-runtime"
+          mkdir -p "$RUNNER_TEMP/copilot-abi"
+          echo "$root" > "$RUNNER_TEMP/copilot-abi/original-source-dir.txt"
+          for elf in \
+            "$root/extensions/copilot/node_modules/@github/copilot/sdk/prebuilds/linux-arm64/runtime.node" \
+            "$root/extensions/copilot/node_modules/@github/copilot/sdk/prebuilds/linux-arm64/cli-native.node" \
+            "$root/node_modules/@github/copilot-sdk-linux-arm64/prebuilds/linux-arm64/runtime.node" \
+            "$root/node_modules/@github/copilot-sdk-linux-arm64/prebuilds/linux-arm64/copilot-runtime"; do
+            readelf -W -h "$elf" > "$RUNNER_TEMP/copilot-abi/$(basename "$elf")-elf-header.txt"
+            readelf -Wd "$elf" > "$RUNNER_TEMP/copilot-abi/$(basename "$elf")-dynamic.txt"
+          done
+      - name: Experimentally compile MIT glibc/Bionic bridge for original Copilot ELF
+        env:
+          OUT_DIR: ${{ runner.temp }}/copilot-abi/native
+          WORK_DIR: ${{ runner.temp }}/glibc-shim-work
+        run: |
+          set -euo pipefail
+          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/27.2.12479018"
+          root=$(cat "$RUNNER_TEMP/copilot-abi/original-source-dir.txt")
+          bash .seven/android/experimental-glibc/build-glibc-shim.sh \
+            "$root/extensions/copilot/node_modules/@github/copilot/sdk/prebuilds/linux-arm64/runtime.node" \
+            "$root/extensions/copilot/node_modules/@github/copilot/sdk/prebuilds/linux-arm64/cli-native.node" \
+            "$root/node_modules/@github/copilot-sdk-linux-arm64/prebuilds/linux-arm64/runtime.node" \
+            "$root/node_modules/@github/copilot-sdk-linux-arm64/prebuilds/linux-arm64/copilot-runtime"
+          cp .seven/android/experimental-glibc/LICENSE "$RUNNER_TEMP/copilot-abi/THIRD-PARTY-LICENSE-MIT.txt"
+          echo "Experimental ELF link feasibility passed. Does NOT mean Copilot works on Android."
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: SevenCode-Copilot-Android-ELF-ABI-research-only
+          path: ${{ runner.temp }}/copilot-abi
+          retention-days: 7
+          if-no-files-found: warn
