@@ -20,6 +20,9 @@ test('full GNU single APK device test uses actual prebuilt 300 MB artifact and n
   assert.ok(bash.includes('server.log'));
   assert.ok(bash.includes('startup-phase.txt'));
   assert.ok(android.includes('startup-phase.txt'));
+  assert.ok(android.includes('startsWith("failed-at:")'));
+  assert.ok(android.includes('Original local runtime failed:'));
+
   assert.ok(bash.includes('keytool -genkeypair'));
   assert.ok(bash.includes('test -n "$app_cert" && test "$app_cert" = "$test_cert"'));
   assert.ok(bash.includes('apksigner'));

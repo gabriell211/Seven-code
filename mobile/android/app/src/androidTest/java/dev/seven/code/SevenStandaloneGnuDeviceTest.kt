@@ -67,8 +67,18 @@ class SevenStandaloneGnuDeviceTest {
         try {
             var localUrl: String? = null
             var lastError: String? = null
+            val phaseFile = java.io.File(context.filesDir,
+                "seven-code-oss-local/startup-phase.txt")
             val deadline = System.nanoTime() + TimeUnit.MINUTES.toNanos(5)
             while (System.nanoTime() < deadline && localUrl == null) {
+                // A genuine failed boot MUST stop this E2E immediately. It
+                // must never spin for 5 minutes or count a blank WebView URL
+                // as a ready VS Code editor.
+                if (phaseFile.isFile && phaseFile.readText().startsWith("failed-at:")) {
+                    lastError = "Original local runtime failed: " +
+                        phaseFile.readText().take(300)
+                    break
+                }
                 scene.onActivity { activity ->
                     val root = activity.findViewById<ViewGroup>(android.R.id.content)
                     lastError = latestError(root) ?: lastError
@@ -81,8 +91,6 @@ class SevenStandaloneGnuDeviceTest {
                 if (lastError != null) break
                 Thread.sleep(500)
             }
-            val phaseFile = java.io.File(context.filesDir,
-                "seven-code-oss-local/startup-phase.txt")
             val phase = if (phaseFile.isFile) phaseFile.readText().take(160)
                 else "startup-phase-file-missing"
             assertTrue("Real GNU Code OSS did not load on Android (phase: $phase). " +
