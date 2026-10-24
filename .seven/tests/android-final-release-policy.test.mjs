@@ -22,6 +22,8 @@ test('release refuses split artifacts, stale SHAs, unverified binaries and debug
   assert.match(release, /--ks-pass env:RELEASE_STORE_PASSWORD/);
   assert.match(release, /Android debug certificate detected/);
   assert.match(release, /zipalign/);
+  assert.ok(release.includes('"$align" -P 16 -f 4'));
+  assert.ok(release.includes('"$align" -c -P 16 4'));
   assert.ok(release.includes('sha256sum SevenCode-Android-arm64-local-release.apk'));
   assert.match(packagePolicy, /Only one standalone/);
 });

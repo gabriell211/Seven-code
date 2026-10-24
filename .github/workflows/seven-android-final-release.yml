@@ -91,7 +91,8 @@ jobs:
           printf '%s' "$RELEASE_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/seven-release.keystore"
           align="$ANDROID_HOME/build-tools/36.0.0/zipalign"
           signer="$ANDROID_HOME/build-tools/36.0.0/apksigner"
-          "$align" -p -f 4 "$input" "$RUNNER_TEMP/SevenCode-aligned.apk"
+          # Android 15+ requires native .so ZIP entries aligned to 16 KiB pages.
+          "$align" -P 16 -f 4 "$input" "$RUNNER_TEMP/SevenCode-aligned.apk"
           "$signer" sign \
             --ks "$RUNNER_TEMP/seven-release.keystore" \
             --ks-key-alias "$RELEASE_KEY_ALIAS" \
@@ -100,6 +101,7 @@ jobs:
             --out "$RUNNER_TEMP/SevenCode-Android-arm64-local-release.apk" \
             "$RUNNER_TEMP/SevenCode-aligned.apk"
           "$signer" verify --verbose "$RUNNER_TEMP/SevenCode-Android-arm64-local-release.apk"
+          "$align" -c -P 16 4 "$RUNNER_TEMP/SevenCode-Android-arm64-local-release.apk"
           cert=$("$signer" verify --print-certs "$RUNNER_TEMP/SevenCode-Android-arm64-local-release.apk")
           if echo "$cert" | grep -qi 'android debug'; then
             echo "::error::Android debug certificate detected; refusing release."
