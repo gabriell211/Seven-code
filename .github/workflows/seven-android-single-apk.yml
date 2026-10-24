@@ -66,6 +66,8 @@ jobs:
           test -s "$RUNNER_TEMP/addons/pty.node"
           test -s "$RUNNER_TEMP/addons/watcher.node"
           test -s "$RUNNER_TEMP/addons/vscode-sqlite3.node"
+          test -s "$RUNNER_TEMP/addons/spdlog.node"
+          test -s "$RUNNER_TEMP/addons/watchdog.node"
       - name: Fetch original compiled Code OSS and signed Bionic Node for same source run
         if: github.event_name == 'workflow_run' || github.event_name == 'push'
         uses: actions/download-artifact@v4
@@ -107,6 +109,10 @@ jobs:
           cp "$RUNNER_TEMP/addons/pty.node" "$server/node_modules/node-pty/build/Release/pty.node"
           cp "$RUNNER_TEMP/addons/watcher.node" "$server/node_modules/@parcel/watcher/build/Release/watcher.node"
           cp "$RUNNER_TEMP/addons/vscode-sqlite3.node" "$server/node_modules/@vscode/sqlite3/build/Release/vscode-sqlite3.node"
+          mkdir -p "$server/node_modules/@vscode/spdlog/build/Release"
+          mkdir -p "$server/node_modules/@vscode/native-watchdog/build/Release"
+          cp "$RUNNER_TEMP/addons/spdlog.node" "$server/node_modules/@vscode/spdlog/build/Release/spdlog.node"
+          cp "$RUNNER_TEMP/addons/watchdog.node" "$server/node_modules/@vscode/native-watchdog/build/Release/watchdog.node"
           # Code OSS gulp bundles a GNU/Linux Node executable. Android uses
           # the verified Bionic libnode.so shipped in the APK, never that ELF.
           rm -f "$server/node"
