@@ -348,7 +348,6 @@ class SevenAndroidAgentShell {
         ]);
     }
     dispose() {
-        this.channel.close();
         for (const [requestId, request] of this.pending) {
             clearTimeout(request.timer);
             request.cancel?.dispose();
@@ -356,6 +355,7 @@ class SevenAndroidAgentShell {
             this.channel.postMessage({ type: 'ai-cancel', requestId });
         }
         this.pending.clear();
+        this.channel.close();
     }
 }
 
