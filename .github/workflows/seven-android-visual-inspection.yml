@@ -1,0 +1,72 @@
+name: Seven Code Android - screenshot of previously verified APK
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/seven-android-visual-inspection.yml"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  mobile-screen:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select latest successful real Workbench Android APK from main
+        id: verified
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          RUN_ID="$(gh run list --workflow seven-android-offline-web.yml --branch main --status success --limit 1 --json databaseId --jq '.[0].databaseId')"
+          test -n "$RUN_ID"
+          test "$RUN_ID" != "null"
+          echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
+          echo "Selected emulator-verified Code OSS Web run: $RUN_ID"
+      - name: Retrieve already-tested complete APK
+        uses: actions/download-artifact@v4
+        with:
+          name: SevenCode-Android-Web-offline-emulator-verified
+          path: ${{ runner.temp }}/verified-apk
+          run-id: ${{ steps.verified.outputs.run_id }}
+          github-token: ${{ github.token }}
+      - name: Prove this APK contains original offline Code OSS Workbench
+        run: |
+          set -euo pipefail
+          node .seven/verify-android-web.mjs "$RUNNER_TEMP/verified-apk/SevenCode-Android-Web-offline-tested-debug.apk"
+          (cd "$RUNNER_TEMP/verified-apk" && sha256sum -c SHA256SUMS.txt)
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v4
+      - name: Capture actual Android screen on Pixel 5 portrait (not a mock)
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_5
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: |
+            set -eu
+            mkdir -p "$RUNNER_TEMP/seven-code-visual"
+            adb install -r "$RUNNER_TEMP/verified-apk/SevenCode-Android-Web-offline-tested-debug.apk"
+            adb shell am start -W -n dev.seven.code/.MainActivity
+            sleep 25
+            adb shell dumpsys activity activities | grep -m 1 -E 'topResumedActivity|ResumedActivity' || true
+            adb shell wm size
+            adb shell wm density
+            adb exec-out screencap -p > "$RUNNER_TEMP/seven-code-visual/SevenCode-Android-Pixel5-portrait.png"
+            python3 -c 'import os,struct,sys; p=open(sys.argv[1],"rb").read(); assert p[:8]==b"\x89PNG\r\n\x1a\n", "No Android PNG"; w,h=struct.unpack(">II",p[16:24]); print("Actual emulator capture:",w,h,"bytes:",len(p)); assert w>=300 and h>=600 and len(p)>20000' "$RUNNER_TEMP/seven-code-visual/SevenCode-Android-Pixel5-portrait.png"
+      - name: Upload actual phone-size Android screenshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: SevenCode-Android-Pixel5-real-visual-preview
+          path: ${{ runner.temp }}/seven-code-visual/SevenCode-Android-Pixel5-portrait.png
+          if-no-files-found: error
+          retention-days: 14
