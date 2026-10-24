@@ -46,6 +46,27 @@ jobs:
           node -e "const m=require(process.argv[1]);if(m.androidVerified!==false||m.releaseEligible!==false||Object.keys(m.originalCopilotElf).length!==4)process.exit(1)" "$RUNNER_TEMP/gnu-runtime/manifest.json"
           tar -C "$RUNNER_TEMP" -czf "$RUNNER_TEMP/gnu-runtime-research.tar.gz" gnu-runtime
           test -s "$RUNNER_TEMP/gnu-runtime-research.tar.gz"
+      - name: Actually load original Copilot native addons into isolated GNU ARM64 Node
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/compiled/vscode-reh-web-linux-arm64"
+          loader="$RUNNER_TEMP/gnu-runtime/ld-linux-aarch64.so.1"
+          node="$RUNNER_TEMP/gnu-runtime/node"
+          libs="$RUNNER_TEMP/gnu-runtime/lib"
+          # Pure ABI probes are not sufficient: dlopen and N-API registration
+          # must succeed with the four ORIGINAL Copilot ELF components.
+          LD_LIBRARY_PATH="$libs" "$loader" --library-path "$libs" "$node" -e '
+            for (const name of process.argv.slice(1)) {
+              const value = require(name);
+              if (value == null) throw new Error("Empty native Copilot module: " + name);
+              console.log("GNU Copilot addon loaded:", name);
+            }
+          ' \
+            "$root/extensions/copilot/node_modules/@github/copilot/sdk/prebuilds/linux-arm64/runtime.node" \
+            "$root/extensions/copilot/node_modules/@github/copilot/sdk/prebuilds/linux-arm64/cli-native.node" \
+            "$root/node_modules/@github/copilot-sdk-linux-arm64/prebuilds/linux-arm64/runtime.node"
+          "$loader" --verify "$root/node_modules/@github/copilot-sdk-linux-arm64/prebuilds/linux-arm64/copilot-runtime"
+          echo "GNU AArch64 original native addons loaded. This is NOT proof of Android compatibility or Copilot OAuth."
       - name: Keep research evidence separate from any APK/release
         if: success()
         uses: actions/upload-artifact@v4
