@@ -121,8 +121,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          version_name=$(sed -n 's/^[[:space:]]*versionName = "\\([^"]*\\)".*/\\1/p' mobile/android/app/build.gradle.kts)
-          if ! [[ "$version_name" =~ ^[0-9]+\\.[0-9]+\\.[0-9]+$ ]]; then
+          version_name=$(sed -n 's/^[[:space:]]*versionName = "\([^"]*\)".*/\1/p' mobile/android/app/build.gradle.kts)
+          if ! [[ "$version_name" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "::error::Final release must use a stable Android versionName, not preview: $version_name"
             exit 1
           fi
