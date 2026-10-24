@@ -93,7 +93,7 @@ NO_UNDEFINED_FLAG=(-Wl,-z,defs)
 # Include it in the experimental shim for API26 instead of fabricating
 # stack-unwind functions, which would silently corrupt C++ exceptions.
 UNWIND_ARCHIVE_FLAGS=()
-if [ "$API" = 26 ]; then
+if [ "$API" = 26 ] && [ "${SEVEN_EXPERIMENTAL_LINK_LLVM_UNWIND:-0}" = "1" ]; then
     UNWIND_ARCHIVE="$(find "$NDK/toolchains/llvm/prebuilt/$HOST_TAG/lib/clang" \
       -type f -path '*/lib/linux/aarch64/libunwind.a' -print -quit)"
     test -n "$UNWIND_ARCHIVE" && test -s "$UNWIND_ARCHIVE" || {

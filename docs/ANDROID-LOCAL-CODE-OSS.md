@@ -78,8 +78,16 @@ versioned symbols statically resolve the three existing Copilot `.node`
 modules' GNU/Linux imports. **This is only link-feasibility evidence**.
 The second [API-level qualification matrix](https://github.com/gabriell211/Seven-code/actions/runs/40056926173)
 proved that the **API 30 ELF symbol probe passes** but **API 26 fails**
-with 24 unsatisfied imports (including `posix_spawn*`, `getrandom`,
-`statx` and `_Unwind_*`). Seven Code targets minSdk 26, so the
+with 24 unsatisfied imports initially. Three actual syscall-backed
+compatibility implementations (`getrandom`, `getentropy`, and `statx`)
+now compile on Android 26, reducing the original unresolved set from
+**24 to 21**. The remaining 21 symbols comprise `posix_spawn*`
+and `_Unwind_*` families. A separate attempt to statically link the
+NDK's real AArch64 `libunwind.a` built successfully but **did not
+export the missing GNU unwind ABI**, so that link is now opt-in
+(`SEVEN_EXPERIMENTAL_LINK_LLVM_UNWIND=1`) rather than falsely
+presented as a fix. Android 30 continues to pass this limited ELF symbol
+probe, which is not a Copilot functional test. Seven Code targets minSdk 26, so the
 experimental shim cannot ship as a universally compatible Android runtime.
 The failures must be implemented correctly and checked against a genuine
 Android 26 environment, not satisfied by no-op stubs.
