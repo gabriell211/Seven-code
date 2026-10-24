@@ -1,0 +1,79 @@
+name: Seven Code Android - compile Code OSS ARM64
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/seven-android-codeoss-arm64.yml"
+      - ".seven/android/**"
+      - "build/gulpfile.reh.ts"
+      - "src/vs/workbench/browser/sevenMobileTerminalBridge.ts"
+      - "src/vs/workbench/contrib/terminal/browser/sevenAndroidTerminalProcess.ts"
+      - "extensions/seven-code-mobile-terminal/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: seven-code-android-codeoss-arm64-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  codeoss-arm64:
+    name: Compile Code OSS web server on native Linux ARM64 runner
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 120
+    env:
+      NODE_OPTIONS: --max-old-space-size=6144
+      VSCODE_QUALITY: oss
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - name: Check native ARM64 build host and MIT Code OSS inputs
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = "aarch64"
+          grep -q 'MIT' LICENSE.txt
+          test -s ThirdPartyNotices.txt
+          node -e "const p=require('./package.json'); if(p.name!=='seven-code-dev')process.exit(1);console.log('Code OSS',p.version)"
+      - name: Install native dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libsecret-1-dev libkrb5-dev libx11-dev libxkbfile-dev libnotify-dev libnss3-dev libatk-bridge2.0-dev libasound2-dev libgbm-dev
+      - name: Build upstream Code OSS web workbench and ARM64 extension host from source
+        run: |
+          npm ci --no-audit --no-fund
+          npm run gulp compile-web
+          npm run gulp vscode-reh-web-linux-arm64-min
+      - name: Qualify ARM64 Code OSS build and report Bionic conversion work
+        run: |
+          set -euo pipefail
+          root="../vscode-reh-web-linux-arm64"
+          test -s "$root/out/server-main.js"
+          test -s "$root/out/vs/code/browser/workbench/workbench.js"
+          test -s "$root/out/vs/workbench/api/node/extensionHostProcess.js"
+          test -s "$root/extensions/seven-code-mobile-terminal/dist/browser/extension.js"
+          test -s "$root/extensions/copilot/dist/extension.js"
+          test -s "$root/ThirdPartyNotices.txt"
+          test -s "$root/LICENSE.txt"
+          test -s "$root/product.json"
+          node -e "const p=require('../vscode-reh-web-linux-arm64/product.json');if(p.nameShort!=='Seven Code'||!/^\w{40}$/.test(p.commit))process.exit(1)"
+          python3 .seven/android/audit-codeoss-abi.py "$root" --stage linux-arm64
+          du -sh "$root"
+      - name: Save native ARM64 Code OSS compilation as a staging artifact
+        run: |
+          set -euo pipefail
+          tar -C .. -czf "$RUNNER_TEMP/SevenCode-CodeOSS-linux-arm64-build.tar.gz" vscode-reh-web-linux-arm64
+          test "$(stat -c %s "$RUNNER_TEMP/SevenCode-CodeOSS-linux-arm64-build.tar.gz")" -ge 15000000
+          sha256sum "$RUNNER_TEMP/SevenCode-CodeOSS-linux-arm64-build.tar.gz" | tee "$RUNNER_TEMP/SHA256SUMS.txt"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SevenCode-CodeOSS-linux-arm64-build
+          path: |
+            ${{ runner.temp }}/SevenCode-CodeOSS-linux-arm64-build.tar.gz
+            ${{ runner.temp }}/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 14
