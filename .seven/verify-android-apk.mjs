@@ -27,11 +27,11 @@ export function verifyApkEntries(entries) {
  * or Gradle signed them successfully.
  */
 export function verifyArm64ElfPageAlignment(readelfOutput) {
-  const loads = readelfOutput.split(/\\r?\\n/)
-    .filter(line => /^\\s*LOAD\\s+/.test(line));
+  const loads = readelfOutput.split(/\r?\n/)
+    .filter(line => /^\s*LOAD\s+/.test(line));
   if (loads.length === 0) return false;
   return loads.every(line => {
-    const value = line.trim().split(/\\s+/).at(-1);
+    const value = line.trim().split(/\s+/).at(-1);
     const size = Number.parseInt(value, 16);
     return /^0x[0-9a-fA-F]+$/.test(value) && Number.isFinite(size) &&
       size >= 16384 && size % 16384 === 0;
