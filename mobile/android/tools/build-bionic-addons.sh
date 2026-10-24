@@ -166,7 +166,56 @@ mkdir -p "$SERVER/node_modules/@vscode/native-watchdog/build/Release"
 cp "$OUT/spdlog/spdlog.node" "$SERVER/node_modules/@vscode/spdlog/build/Release/spdlog.node"
 cp "$OUT/watchdog/watchdog.node" "$SERVER/node_modules/@vscode/native-watchdog/build/Release/watchdog.node"
 
+# Build the genuine MongoDB Kerberos N-API binding against signed Termux
+# Android/Bionic GSSAPI/krb5, not against glibc's system GSSAPI.
+# The signed krb5 runtime libraries are added to the Android app ZIP during
+# assembly; the addon is not considered loadable without those dependencies.
+KERBEROS_VERSION="$(get_version kerberos)"
+echo "Native Code OSS addon: kerberos=$KERBEROS_VERSION (Android Bionic)"
+python3 .seven/android/fetch-android-kerberos.py "$WORK/krb5-sdk"
+fetch_package kerberos "$KERBEROS_VERSION" "$WORK/kerberos"
+python3 - "$WORK/kerberos/src/unix/kerberos_gss.cc" "$WORK/krb5-sdk/libs" <<'PY'
+from pathlib import Path
+import sys
+file = Path(sys.argv[1])
+libs = Path(sys.argv[2])
+source = file.read_text()
+marker = "#ifndef __FreeBSD__"
+if marker not in source:
+    raise SystemExit("Kerberos module lacks expected UNIX GSSAPI dlopen switch")
+
+def soname(prefix):
+    options = [f.name for f in libs.iterdir() if f.name == prefix or f.name.startswith(prefix + ".")]
+    if not options:
+        raise SystemExit("Signed Android Kerberos SDK lacks " + prefix)
+    return sorted(options, key=len)[0]
+
+gssapi = soname("libgssapi_krb5.so")
+krb5 = soname("libkrb5.so")
+comerr = soname("libcom_err.so")
+android = (f"#if defined(__ANDROID__)\n#define DYLIBS(V) \\\n"
+           f"    V(gssapi, \"{gssapi}\") \\\n"
+           f"    V(krb5, \"{krb5}\") \\\n"
+           f"    V(comerr, \"{comerr}\")\n"
+           "#elif !defined(__FreeBSD__)")
+file.write_text(source.replace(marker, android, 1))
+print("Android GSSAPI dlopen libs:", gssapi, krb5, comerr)
+PY
+build_shared "$WORK/kerberos" "$OUT/kerberos/kerberos.node" "$WORK/api8" \
+  src/kerberos.cc src/unix/base64.cc src/unix/kerberos_gss.cc \
+  src/unix/kerberos_unix.cc -- -fexceptions -DKERBEROS_USE_RTLD=1 \
+  -I"$WORK/krb5-sdk/include" -DNODE_GYP_MODULE_NAME=kerberos
+verify "$OUT/kerberos/kerberos.node"
+mkdir -p "$SERVER/node_modules/kerberos/build/Release/obj.target"
+cp "$OUT/kerberos/kerberos.node" "$SERVER/node_modules/kerberos/build/Release/kerberos.node"
+cp "$OUT/kerberos/kerberos.node" "$SERVER/node_modules/kerberos/build/Release/obj.target/kerberos.node"
+# These runtime libraries are mandatory whenever the ported Kerberos addon
+# is distributed. The signed-source SDK's metadata travels with the artifact.
+mkdir -p "$BIONIC/kerberos"
+cp -a "$WORK/krb5-sdk/libs" "$BIONIC/kerberos/libs"
+cp "$WORK/krb5-sdk/kerberos-provenance.json" "$BIONIC/kerberos/provenance.json"
+
 cp "$OUT/node-pty/pty.node" "$SERVER/node_modules/node-pty/build/Release/pty.node"
 cp "$OUT/watcher/watcher.node" "$SERVER/node_modules/@parcel/watcher/build/Release/watcher.node"
 cp "$OUT/sqlite/vscode-sqlite3.node" "$SERVER/node_modules/@vscode/sqlite3/build/Release/vscode-sqlite3.node"
-echo "Compiled and installed native Code OSS Android/Bionic PTY, watcher and SQLite3 modules."
+echo "Compiled Android/Bionic Code OSS PTY, watcher, SQLite, spdlog, watchdog and Kerberos native modules."
