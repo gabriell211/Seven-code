@@ -122,6 +122,9 @@ jobs:
           retention-days: 14
 
   publish:
+    # Disabled by owner requirement: NEVER publish Android APK + separate Code OSS server.
+    # Only a fully bundled single APK with Android Bionic runtime and device E2E may be released.
+    if: ${{ false }}
     name: Publish verified Android-only developer preview
     needs: [android, server]
     if: ${{ needs.android.result == 'success' && needs.server.result == 'success' }}
