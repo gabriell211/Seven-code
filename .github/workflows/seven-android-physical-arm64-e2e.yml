@@ -1,0 +1,109 @@
+name: Seven Code Android - physical ARM64 GNU runtime acceptance (experimental)
+
+on:
+  workflow_dispatch:
+    inputs:
+      experimental_run_id:
+        description: "Successful GNU single-APK build run ID from this repository"
+        required: true
+        type: string
+
+# This does not prove OAuth/Copilot Agent and cannot authorize a release.
+# Set up a self-hosted Linux x86_64 runner physically connected to ONE
+# unlocked Android ARM64 phone (USB debugging enabled, adb authorized).
+# Add the custom runner label 'seven-android-device'. Never reuse a
+# public GitHub-hosted emulator for this real-device acceptance gate.
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: seven-real-android-arm64-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  physical-arm64-gnu-e2e:
+    name: Physical ARM64 Code OSS startup (experimental; not a release check)
+    runs-on: [self-hosted, Linux, X64, seven-android-device]
+    timeout-minutes: 90
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require successful same-repository GNU APK build, pin exact source commit
+        id: source
+        env:
+          SOURCE_RUN_ID: ${{ inputs.experimental_run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_RUN_ID" =~ ^[0-9]+$ ]] || {
+            echo "::error::Invalid experimental GNU APK Actions run ID"; exit 1;
+          }
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN_ID" > "$RUNNER_TEMP/source-run.json"
+          jq -e --arg repo "$GITHUB_REPOSITORY" '
+            .status == "completed" and
+            .conclusion == "success" and
+            .head_branch == "main" and
+            .head_repository.full_name == $repo and
+            .name == "Seven Code Android - experimental isolated GNU ARM64 single APK" and
+            (.head_sha | test("^[a-f0-9]{40}$"))
+          ' "$RUNNER_TEMP/source-run.json" >/dev/null || {
+            echo "::error::Not a successful trusted GNU APK build from main"; exit 1;
+          }
+          sha="$(jq -r .head_sha "$RUNNER_TEMP/source-run.json")"
+          git fetch --no-tags --depth=1 origin "$sha"
+          git checkout --detach "$sha"
+          test "$(git rev-parse HEAD)" = "$sha"
+          echo "source_sha=$sha" >> "$GITHUB_OUTPUT"
+      - uses: actions/download-artifact@v4
+        with:
+          run-id: ${{ inputs.experimental_run_id }}
+          name: SevenCode-gnu-Android-arm64-EXPERIMENTAL-debug-only
+          path: ${{ runner.temp }}/experimental-apk
+          github-token: ${{ github.token }}
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v4
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.13"
+      - name: Require exactly one authorized physical Android ARM64 phone
+        shell: bash
+        run: |
+          set -euo pipefail
+          adb start-server
+          adb devices -l
+          mapfile -t devices < <(adb devices | awk '$2 == "device" {print $1}')
+          if [[ "${#devices[@]}" -ne 1 ]]; then
+            echo "::error::Connect and authorize exactly one real Android device (found ${#devices[@]})."
+            exit 1
+          fi
+          abi="$(adb -s "${devices[0]}" shell getprop ro.product.cpu.abilist | tr -d '\r')"
+          emulated="$(adb -s "${devices[0]}" shell getprop ro.kernel.qemu | tr -d '\r')"
+          [[ "$abi" == *arm64-v8a* && "$emulated" != "1" ]] || {
+            echo "::error::A physical Android ARM64 device is required, not an emulator or x86 translation"
+            exit 1
+          }
+          adb -s "${devices[0]}" shell getprop ro.build.version.sdk
+          adb -s "${devices[0]}" shell df -h /data
+      - name: Verify the downloaded complete original Code OSS runtime APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk="$RUNNER_TEMP/experimental-apk/SevenCode-gnu-arm64-EXPERIMENTAL-debug.apk"
+          test -s "$apk"
+          python3 .seven/android/verify-gnu-apk.py "$apk"
+      - name: Compile instrumentation from exactly the APK source revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-36" "build-tools;36.0.0" "cmake;3.22.1" "ndk;27.2.12479018"
+          gradle -p mobile/android :app:assembleDebugAndroidTest --no-daemon --stacktrace
+          test -s mobile/android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+      - name: Install real single APK and run original GNU startup instrumentation
+        shell: bash
+        run: bash .seven/android/run-gnu-apk-e2e.sh
