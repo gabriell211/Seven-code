@@ -44,6 +44,11 @@ jobs:
           distribution: temurin
           java-version: "17"
       - uses: android-actions/setup-android@v4
+      - name: Enable hardware acceleration for Android emulator
+        run: |
+          set -euo pipefail
+          test -e /dev/kvm
+          sudo chmod 666 /dev/kvm
       - name: Capture actual Android screen on Pixel 5 portrait (not a mock)
         uses: reactivecircus/android-emulator-runner@v2
         with:
