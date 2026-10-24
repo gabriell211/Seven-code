@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/seven-web-server.yml"
+      - ".seven/verify-server.mjs"
       - "src/vs/workbench/contrib/terminal/browser/terminalService.ts"
       - "src/vs/workbench/contrib/terminal/browser/sevenAndroidTerminalProcess.ts"
       - "src/vs/workbench/browser/sevenMobileTerminalBridge.ts"
@@ -49,7 +50,7 @@ jobs:
         run: |
           node node_modules/playwright-core/cli.js install --with-deps chromium
           node -e "const fs = require('node:fs'); const { chromium } = require('playwright-core'); const p = chromium.executablePath(); if (!fs.existsSync(p)) { throw new Error('Playwright browser revision missing: ' + p); } console.log('Verified Chromium executable:', p)"
-      - name: Verify compiled production editor and extension hosts
+      - name: Verify compiled editor, Android terminal adapter and extension hosts
         env:
           SEVEN_CODE_BROWSER_E2E: "1"
         run: |
