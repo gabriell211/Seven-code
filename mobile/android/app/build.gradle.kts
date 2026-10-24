@@ -21,6 +21,10 @@ android {
     packaging {
         jniLibs {
             useLegacyPackaging = true
+            // Keep original GNU ELF bytes intact in the experimental APK.
+            // Their SHA-256 hashes are verified again by the Android runtime.
+            keepDebugSymbols.add("**/libseven-gnu-node.so")
+            keepDebugSymbols.add("**/libseven-gnu-loader.so")
         }
     }
 
