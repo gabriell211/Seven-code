@@ -15,7 +15,8 @@
   ],
   "activationEvents": [
     "onStartupFinished",
-    "onCommand:sevenCode.openAndroidFolder"
+    "onCommand:sevenCode.openAndroidFolder",
+    "onCommand:sevenCode.openCopilotChat"
   ],
   "capabilities": {
     "virtualWorkspaces": true,
@@ -40,6 +41,11 @@
       {
         "command": "sevenCode.openAndroidFolder",
         "title": "Seven Code: Abrir pasta do celular",
+        "category": "Seven Code"
+      },
+      {
+        "command": "sevenCode.openCopilotChat",
+        "title": "Abrir Copilot Chat",
         "category": "Seven Code"
       }
     ],
