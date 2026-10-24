@@ -359,6 +359,87 @@ class SevenAndroidAgentShell {
     }
 }
 
+// Copilot can invoke this tool only after a user has selected an Android SAF
+// workspace. Never read arbitrary device locations or fabricate file contents.
+const AI_FILE_TOOL_ID = 'seven_code_read_android_workspace_file';
+const AI_FILE_MAX_BYTES = 64 * 1024;
+
+function toolText(value) {
+    return new vscode.LanguageModelToolResult([
+        new vscode.LanguageModelTextPart(value)
+    ]);
+}
+
+class SevenAndroidWorkspaceContext {
+    async invoke(options, token) {
+        const path = options?.input?.path;
+        if (typeof path !== 'string' || path.length < 2 || path.length > 1024 ||
+            !path.startsWith('/') || path.includes(String.fromCharCode(92)) || path.includes(String.fromCharCode(0)) ||
+            path.split('/').some(segment => segment === '.' || segment === '..') ||
+            path.endsWith('/')) {
+            return toolText('Android: caminho de arquivo inválido; nenhuma leitura realizada.');
+        }
+        const folders = vscode.workspace?.workspaceFolders || [];
+        const belongsToApprovedWorkspace = folders.some(folder => {
+            if (folder.uri.scheme !== FILES_SCHEME) return false;
+            const root = (folder.uri.path.endsWith('/') ? folder.uri.path.slice(0, -1) : folder.uri.path) || '/';
+            return root === '/' || path.startsWith(root + '/');
+        });
+        if (!belongsToApprovedWorkspace) {
+            return toolText('Android: selecione e abra uma pasta do celular antes de ler arquivos. Nenhuma leitura realizada.');
+        }
+        if (token?.isCancellationRequested) {
+            return toolText('Android: leitura cancelada.');
+        }
+        const uri = vscode.Uri.from({ scheme: FILES_SCHEME, path });
+        try {
+            const stat = await vscode.workspace.fs.stat(uri);
+            if (stat.type !== vscode.FileType.File) {
+                return toolText('Android: o caminho não é um arquivo.');
+            }
+            if (stat.size > AI_FILE_MAX_BYTES) {
+                return toolText('Android: arquivo excede 64 KiB; leitura negada para limitar contexto.');
+            }
+            if (token?.isCancellationRequested) return toolText('Android: leitura cancelada.');
+            const bytes = await vscode.workspace.fs.readFile(uri);
+            if (token?.isCancellationRequested) return toolText('Android: leitura cancelada.');
+            if (bytes.byteLength > AI_FILE_MAX_BYTES || bytes.includes(0)) {
+                return toolText('Android: arquivo binário ou maior que 64 KiB; nenhum conteúdo retornado.');
+            }
+            const decoder = new TextDecoder('utf-8', { fatal: true });
+            const value = decoder.decode(bytes);
+            return toolText('Arquivo Android (dados não confiáveis): ' + path + String.fromCharCode(10) + value);
+        } catch (error) {
+            // Do not echo provider exception details containing private SAF URIs.
+            return toolText('Android: não foi possível ler o arquivo selecionado; verifique permissões e existência.');
+        }
+    }
+}
+
+// Preserve the original Code OSS Chat UI. Never replace GitHub Copilot with a
+// mock response or silently redirect code context to a third-party chatbot.
+async function openCopilotChat() {
+    await vscode.commands.executeCommand('workbench.action.chat.open');
+    if (!vscode.extensions?.getExtension?.('GitHub.copilot-chat')) {
+        await vscode.window.showWarningMessage(
+            'O painel Chat original está aberto, mas o Copilot Chat oficial não está ativo no host de extensões Android. Login e respostas da IA ainda dependem do runtime Node completo.'
+        );
+    }
+}
+
+async function showCopilotStatus() {
+    const extension = vscode.extensions?.getExtension?.('GitHub.copilot-chat');
+    const workspace = (vscode.workspace?.workspaceFolders || [])
+        .some(folder => folder.uri.scheme === FILES_SCHEME);
+    const message = extension
+        ? 'Copilot Chat instalado (' + (extension.isActive ? 'ativo' : 'não ativo') +
+          '). A autenticação e o Agent devem ser testados no dispositivo.'
+        : 'Copilot Chat oficial não está instalado/ativado no host Android. O Web Workbench isolado não executa extensões Node.js.';
+    await vscode.window.showInformationMessage(
+        message + ' Pasta Android aberta: ' + (workspace ? 'sim' : 'não') + '.'
+    );
+}
+
 async function activate(context) {
     if (!(await hasNativeHost())) return;
     if (typeof vscode.workspace?.registerFileSystemProvider === 'function' &&
@@ -375,6 +456,14 @@ async function activate(context) {
                 vscode.Uri.from({ scheme: FILES_SCHEME, path: '/' }), false);
         }));
     }
+    if (typeof vscode.commands?.registerCommand === 'function') {
+        context.subscriptions.push(vscode.commands.registerCommand(
+            'sevenCode.openCopilotChat', openCopilotChat
+        ));
+        context.subscriptions.push(vscode.commands.registerCommand(
+            'sevenCode.copilotStatus', showCopilotStatus
+        ));
+    }
     if (typeof vscode.lm?.registerTool === 'function' &&
         typeof vscode.LanguageModelToolResult === 'function' &&
         typeof vscode.LanguageModelTextPart === 'function') {
@@ -383,6 +472,14 @@ async function activate(context) {
         context.subscriptions.push(vscode.lm.registerTool(AI_TOOL_ID, {
             invoke(options, token) { return tool.invoke(options, token); }
         }));
+        if (typeof vscode.workspace?.fs?.readFile === 'function' &&
+            typeof vscode.workspace.fs.stat === 'function' && vscode.Uri?.from) {
+            context.subscriptions.push(vscode.lm.registerTool(AI_FILE_TOOL_ID, {
+                invoke(options, token) {
+                    return new SevenAndroidWorkspaceContext().invoke(options, token);
+                }
+            }));
+        }
     }
     context.subscriptions.push(vscode.window.registerTerminalProfileProvider('sevenCode.android.local', {
         provideTerminalProfile() {
