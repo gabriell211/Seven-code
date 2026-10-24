@@ -90,21 +90,6 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           script: |
             gradle -p mobile/android :app:connectedDebugAndroidTest --no-daemon --stacktrace -Pandroid.testInstrumentationRunnerArguments.class=dev.seven.code.SevenOfflineWebWorkbenchDeviceTest
-            # Capture the actual emulator screen while the Code OSS UI is loaded.
-            # The instrumented test writes the UiAutomation pixels inside app data.
-            mkdir -p "$RUNNER_TEMP/seven-code-visual"
-            adb shell wm size
-            adb shell wm density
-            adb exec-out run-as dev.seven.code cat files/seven-code-portrait.png > "$RUNNER_TEMP/seven-code-visual/SevenCode-Android-Pixel5-portrait.png"
-            test "$(stat -c%s "$RUNNER_TEMP/seven-code-visual/SevenCode-Android-Pixel5-portrait.png")" -gt 20000
-            python3 -c 'import struct,sys; p=open(sys.argv[1],"rb").read(24); assert p[:8]==b"\x89PNG\r\n\x1a\n"; w,h=struct.unpack(">II",p[16:24]); print("Real Android screenshot:",w,"x",h); assert w>=300 and h>=600' "$RUNNER_TEMP/seven-code-visual/SevenCode-Android-Pixel5-portrait.png"
-      - name: Upload actual Android emulator screen for visual review
-        uses: actions/upload-artifact@v4
-        with:
-          name: SevenCode-Android-Pixel5-portrait-real-screenshot
-          path: ${{ runner.temp }}/seven-code-visual/SevenCode-Android-Pixel5-portrait.png
-          if-no-files-found: error
-          retention-days: 14
       - name: Attach APK ONLY after actual on-emulator Web Workbench test passes
         run: |
           mkdir -p "$RUNNER_TEMP/offline-web-apk"
