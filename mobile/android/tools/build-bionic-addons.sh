@@ -180,9 +180,11 @@ import sys
 file = Path(sys.argv[1])
 libs = Path(sys.argv[2])
 source = file.read_text()
-marker = "#ifndef __FreeBSD__"
-if marker not in source:
-    raise SystemExit("Kerberos module lacks expected UNIX GSSAPI dlopen switch")
+begin = source.find("#define DYLIBS(V)")
+end = source.find("#define LIBRARY_HANDLE_GETTER", begin)
+if begin < 0 or end < 0 or end <= begin:
+    raise SystemExit("Kerberos module lacks expected GSSAPI dlopen block")
+upstream_switch = source[begin:end]
 
 def soname(prefix):
     options = [f.name for f in libs.iterdir() if f.name == prefix or f.name.startswith(prefix + ".")]
@@ -197,8 +199,9 @@ android = (f"#if defined(__ANDROID__)\n#define DYLIBS(V) \\\n"
            f"    V(gssapi, \"{gssapi}\") \\\n"
            f"    V(krb5, \"{krb5}\") \\\n"
            f"    V(comerr, \"{comerr}\")\n"
-           "#elif !defined(__FreeBSD__)")
-file.write_text(source.replace(marker, android, 1))
+           "")
+file.write_text(source[:begin] + android + "\n#else\n" +
+                upstream_switch + "#endif\n" + source[end:])
 print("Android GSSAPI dlopen libs:", gssapi, krb5, comerr)
 PY
 build_shared "$WORK/kerberos" "$OUT/kerberos/kerberos.node" "$WORK/api8" \
