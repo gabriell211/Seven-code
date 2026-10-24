@@ -66,8 +66,12 @@ jobs:
           bash .seven/android/experimental-glibc/build-glibc-shim.sh \
             "$root/extensions/copilot/node_modules/@github/copilot/sdk/prebuilds/linux-arm64/runtime.node" \
             "$root/extensions/copilot/node_modules/@github/copilot/sdk/prebuilds/linux-arm64/cli-native.node" \
-            "$root/node_modules/@github/copilot-sdk-linux-arm64/prebuilds/linux-arm64/runtime.node" \
-            "$root/node_modules/@github/copilot-sdk-linux-arm64/prebuilds/linux-arm64/copilot-runtime"
+            "$root/node_modules/@github/copilot-sdk-linux-arm64/prebuilds/linux-arm64/runtime.node"
+          # 'copilot-runtime' is an executable, not a Node addon. It names
+          # glibc's /lib/ld-linux interpreter and must be validated as an
+          # independently launchable process; a .node dlopen shim is not that.
+          readelf -Wl "$root/node_modules/@github/copilot-sdk-linux-arm64/prebuilds/linux-arm64/copilot-runtime" \
+            | tee "$RUNNER_TEMP/copilot-abi/copilot-runtime-program-headers.txt"
           cp .seven/android/experimental-glibc/LICENSE "$RUNNER_TEMP/copilot-abi/THIRD-PARTY-LICENSE-MIT.txt"
           echo "Experimental ELF link feasibility passed. Does NOT mean Copilot works on Android."
       - uses: actions/upload-artifact@v4
