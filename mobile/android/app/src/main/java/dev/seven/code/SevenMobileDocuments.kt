@@ -39,6 +39,7 @@ internal class SevenMobileDocuments(private val activity: Activity) {
 
     private data class PendingWrite(
         val path: String, val treeUri: String, val stage: File, val output: RandomAccessFile,
+        val baselineSize: Long?, val baselineMtime: Long?,
         var count: Long = 0
     )
 
@@ -137,6 +138,9 @@ internal class SevenMobileDocuments(private val activity: Activity) {
         }
     }
 
+    // SAF providers and staged write streams are not thread-safe. Serialize
+    // operations from concurrent editor requests, including commit/abort.
+    @Synchronized
     fun process(input: JSONObject): JSONObject {
         val id = input.getString("requestId")
         check(id.matches(Regex("[a-zA-Z0-9_-]{1,64}"))) { "Identificador inválido." }
@@ -221,8 +225,13 @@ internal class SevenMobileDocuments(private val activity: Activity) {
                 "write-begin" -> {
                     val (parent, name) = parentFor(path)
                     val target = parent.findFile(name)
-                    check(target == null || (target.isFile && target.canWrite())) {
-                        "Arquivo de destino não pode ser gravado."
+                    check(target == null || (target.isFile && target.canWrite() &&
+                        target.length() <= MAX_FILE_SIZE)) {
+                        "Arquivo de destino não pode ser gravado ou excede o limite."
+                    }
+                    check(writes.values.none { it.path == path && it.treeUri ==
+                        activity.getSharedPreferences(PREFS, 0).getString(KEY_TREE, null) }) {
+                        "Este arquivo já está sendo gravado."
                     }
                     check(writes.size < 4 && !writes.containsKey(id)) {
                         "Limite de gravações simultâneas atingido."
@@ -230,7 +239,8 @@ internal class SevenMobileDocuments(private val activity: Activity) {
                     val selected = activity.getSharedPreferences(PREFS, 0)
                         .getString(KEY_TREE, null) ?: error("Selecione uma pasta antes de gravar.")
                     val stage = File.createTempFile("seven-write-", ".tmp", activity.cacheDir)
-                    writes[id] = PendingWrite(path, selected, stage, RandomAccessFile(stage, "rw"))
+                    writes[id] = PendingWrite(path, selected, stage, RandomAccessFile(stage, "rw"),
+                        target?.length(), target?.lastModified())
                     JSONObject()
                 }
                 "write-chunk" -> {
@@ -248,23 +258,74 @@ internal class SevenMobileDocuments(private val activity: Activity) {
                     }
                 }
                 "write-commit" -> {
-                    val pending = writes.remove(id) ?: error("Gravação não iniciada.")
+                    val pending = writes[id] ?: error("Gravação não iniciada.")
                     try {
-                        synchronized(pending) {
-                            pending.output.close()
-                        }
+                        pending.output.close()
                         check(activity.getSharedPreferences(PREFS, 0).getString(KEY_TREE, null) ==
                             pending.treeUri) { "Pasta alterada durante a gravação." }
                         val (parent, name) = parentFor(pending.path)
                         val existing = parent.findFile(name)
-                        val dest = existing ?: parent.createFile("application/octet-stream", name)
-                            ?: error("Não foi possível criar o arquivo.")
-                        activity.contentResolver.openOutputStream(dest.uri, "wt")?.use { out ->
-                            pending.stage.inputStream().use { it.copyTo(out) }
-                            out.flush()
-                        } ?: error("Não foi possível gravar o arquivo.")
-                        JSONObject().put("size", pending.count)
+                        check((existing == null) == (pending.baselineSize == null)) {
+                            "Arquivo alterado fora do Seven Code durante a gravação."
+                        }
+                        if (existing != null) {
+                            check(existing.isFile && existing.length() == pending.baselineSize &&
+                                (pending.baselineMtime == 0L || existing.lastModified() == 0L ||
+                                    existing.lastModified() == pending.baselineMtime)) {
+                                "Arquivo alterado por outro programa. Reabra antes de salvar."
+                            }
+                        }
+
+                        // Android DocumentsProviders have no universal atomic replace.
+                        // Keep a recovery copy outside the SAF provider before
+                        // truncating the original; restore it on a failed write.
+                        val backup = if (existing != null) {
+                            val dir = File(activity.filesDir, "seven-file-recovery")
+                            check(dir.isDirectory || dir.mkdirs()) { "Falha ao criar backup local." }
+                            val copy = File.createTempFile("seven-recovery-", ".bak", dir)
+                            try {
+                                activity.contentResolver.openInputStream(existing.uri)?.use { input ->
+                                    copy.outputStream().use { output -> input.copyTo(output) }
+                                } ?: error("Falha ao fazer cópia de segurança antes de salvar.")
+                                check(copy.length() == pending.baselineSize) {
+                                    "O arquivo mudou durante o backup. Salvar foi cancelado."
+                                }
+                                copy
+                            } catch (error: Exception) {
+                                copy.delete()
+                                throw error
+                            }
+                        } else null
+                        var created: DocumentFile? = null
+                        try {
+                            val target = existing ?: parent.createFile("application/octet-stream", name)
+                                ?.also { created = it } ?: error("Não foi possível criar o arquivo.")
+                            activity.contentResolver.openOutputStream(target.uri, "wt")?.use { out ->
+                                pending.stage.inputStream().use { it.copyTo(out) }
+                                out.flush()
+                            } ?: error("Não foi possível gravar o arquivo.")
+                            backup?.delete()
+                            JSONObject().put("size", pending.count)
+                        } catch (writeError: Exception) {
+                            if (existing != null && backup != null) {
+                                val restored = runCatching {
+                                    activity.contentResolver.openOutputStream(existing.uri, "wt")?.use { out ->
+                                        backup.inputStream().use { it.copyTo(out) }
+                                        out.flush()
+                                    } ?: error("Backup não pôde ser restaurado.")
+                                }
+                                if (restored.isFailure) {
+                                    error("Falha ao salvar e restaurar. Cópia preservada em " +
+                                        backup.absolutePath + ": " + (writeError.message ?: "erro"))
+                                }
+                                backup.delete()
+                            } else {
+                                created?.delete()
+                            }
+                            throw writeError
+                        }
                     } finally {
+                        writes.remove(id)
                         pending.stage.delete()
                     }
                 }
