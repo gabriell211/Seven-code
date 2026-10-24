@@ -140,6 +140,17 @@ try {
 				assert.match(launch.sessionId, /^[a-f0-9]{32}$/);
 				assert.ok(launch.cols > 0 && launch.rows > 0);
 				console.log('Actual compiled Code OSS workbench routed a terminal into the Android-native PTY adapter.');
+
+				// The packaged mobile extension must activate in the actual Code OSS
+				// web extension host, not merely be copied into the server archive.
+				await mobilePage.keyboard.press('F1');
+				const mobileCommandPalette = mobilePage.locator('.quick-input-widget:visible input').first();
+				await mobileCommandPalette.waitFor({ state: 'visible', timeout: 15_000 });
+				await mobileCommandPalette.fill('>Seven Code: Abrir pasta do celular');
+				const phoneFolderCommand = mobilePage.locator('.quick-input-widget:visible .monaco-list-row')
+					.filter({ hasText: 'Abrir pasta do celular' }).first();
+				await phoneFolderCommand.waitFor({ state: 'visible', timeout: 45_000 });
+				console.log('Actual Code OSS web extension host registered the Android phone-folder command.');
 			} finally {
 				await mobileContext.close();
 			}
