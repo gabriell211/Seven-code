@@ -5,6 +5,10 @@ on:
     workflows: ["Seven Code Android - convert Code OSS native modules to Bionic"]
     types: [completed]
   workflow_dispatch:
+  # Repeat the last verified NDK artifacts after workflow-only packaging fixes.
+  push:
+    branches: [main]
+    paths: [".github/workflows/seven-android-single-apk.yml"]
 
 permissions:
   contents: read
@@ -14,6 +18,7 @@ jobs:
   standalone:
     if: >-
       github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'push' ||
       (github.event.workflow_run.conclusion == 'success' &&
        github.event.workflow_run.head_branch == 'main' &&
        github.event.workflow_run.head_repository.full_name == github.repository)
@@ -41,15 +46,15 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq zip unzip binutils
       - name: Download compiled Bionic addons with source provenance
-        if: github.event_name == 'workflow_run'
+        if: github.event_name == 'workflow_run' || github.event_name == 'push'
         uses: actions/download-artifact@v4
         with:
           name: SevenCode-Android-Bionic-core-node-addons
-          run-id: ${{ github.event.workflow_run.id }}
+          run-id: ${{ github.event.workflow_run.id || 40053741018 }}
           github-token: ${{ github.token }}
           path: ${{ runner.temp }}/addons
       - name: Extract source run and pin artifacts to exact revision
-        if: github.event_name == 'workflow_run'
+        if: github.event_name == 'workflow_run' || github.event_name == 'push'
         id: source
         run: |
           set -euo pipefail
@@ -62,7 +67,7 @@ jobs:
           test -s "$RUNNER_TEMP/addons/watcher.node"
           test -s "$RUNNER_TEMP/addons/vscode-sqlite3.node"
       - name: Fetch original compiled Code OSS and signed Bionic Node for same source run
-        if: github.event_name == 'workflow_run'
+        if: github.event_name == 'workflow_run' || github.event_name == 'push'
         uses: actions/download-artifact@v4
         with:
           run-id: ${{ steps.source.outputs.run_id }}
@@ -70,10 +75,14 @@ jobs:
           pattern: SevenCode-*
           path: ${{ runner.temp }}/upstream
       - name: Build reproducible local Code OSS runtime inside Android APK
-        if: github.event_name == 'workflow_run'
+        if: github.event_name == 'workflow_run' || github.event_name == 'push'
         run: |
           set -euo pipefail
           source_sha="${{ steps.source.outputs.source_sha }}"
+          # Checkout is shallow by default. Fetch the original compiled
+          # revision explicitly so the exact tree comparison is meaningful.
+          git fetch --no-tags --depth=1 origin "$source_sha"
+          git cat-file -e "$source_sha^{commit}"
           # The workflow may be newer than the compiled source. This is only
           # safe if all editor, native app and extensions are byte-for-byte
           # unchanged; workflow/docs/tooling changes alone are allowed.
