@@ -268,6 +268,97 @@ class SevenAndroidDocuments {
     }
 }
 
+
+const AI_CHANNEL = 'seven-code-mobile-ai-v1';
+const AI_TOOL_ID = 'seven_code_run_android_shell';
+
+class SevenAndroidAgentShell {
+    constructor() {
+        this.channel = new BroadcastChannel(AI_CHANNEL);
+        this.pending = new Map();
+        this.channel.onmessage = event => {
+            const result = event.data;
+            if (result?.type !== 'ai-result' || typeof result.requestId !== 'string') return;
+            const request = this.pending.get(result.requestId);
+            if (!request) return;
+            this.pending.delete(result.requestId);
+            clearTimeout(request.timer);
+            request.cancel?.dispose();
+            request.resolve(result);
+        };
+    }
+    async invoke(options, token) {
+        const command = options?.input?.command;
+        const timeoutMs = options?.input?.timeoutMs ?? 60000;
+        if (typeof command !== 'string' || command.trim().length === 0 ||
+            command.length > 4096 || command.includes('\0') ||
+            !Number.isInteger(timeoutMs) || timeoutMs < 1000 || timeoutMs > 120000) {
+            return new vscode.LanguageModelToolResult([
+                new vscode.LanguageModelTextPart('Android: comando inválido; não executado.')
+            ]);
+        }
+        if (token?.isCancellationRequested) {
+            return new vscode.LanguageModelToolResult([
+                new vscode.LanguageModelTextPart('Android: execução cancelada; não executado.')
+            ]);
+        }
+        if (this.pending.size !== 0) {
+            return new vscode.LanguageModelToolResult([
+                new vscode.LanguageModelTextPart('Android: outra operação está aguardando aprovação.')
+            ]);
+        }
+        const requestId = crypto.randomUUID().replace(/-/g, '');
+        const result = await new Promise(resolve => {
+            const timer = setTimeout(() => {
+                const request = this.pending.get(requestId);
+                if (!request) return;
+                this.pending.delete(requestId);
+                request.cancel?.dispose();
+                this.channel.postMessage({ type: 'ai-cancel', requestId });
+                resolve({ approved: false, exitCode: null, output: '', error: 'Tempo de espera esgotado' });
+            }, 300000);
+            const cancel = token?.onCancellationRequested?.(() => {
+                const request = this.pending.get(requestId);
+                if (!request) return;
+                this.pending.delete(requestId);
+                clearTimeout(timer);
+                this.channel.postMessage({ type: 'ai-cancel', requestId });
+                resolve({ approved: false, exitCode: null, output: '', error: 'Cancelado pelo agente/usuário' });
+            });
+            this.pending.set(requestId, { resolve, timer, cancel });
+            this.channel.postMessage({ type: 'ai-propose', requestId, command, timeoutMs });
+        });
+        // The original Copilot/VS Code agent receives an ordinary tool result;
+        // Android always asks for explicit user permission before executing.
+        const status = result.approved === true
+            ? result.exitCode === 0 ? 'Comando executado com sucesso'
+                : result.exitCode == null ? 'Execução inconclusiva'
+                    : 'Comando terminou com erro'
+            : 'Usuário não autorizou a execução';
+        return new vscode.LanguageModelToolResult([
+            new vscode.LanguageModelTextPart([
+                status,
+                'Ambiente: Android /system/bin/sh no sandbox do Seven Code; não é o shell do servidor.',
+                'Os arquivos do provedor SAF não são caminhos POSIX neste shell.',
+                'Código de saída: ' + (Number.isInteger(result.exitCode) ? result.exitCode : 'desconhecido'),
+                'Saída' + (result.truncated ? ' (truncada)' : '') + ':',
+                String(result.output || '').slice(0, 131072),
+                result.error ? 'Observação: ' + String(result.error).slice(0, 1000) : ''
+            ].join('\n'))
+        ]);
+    }
+    dispose() {
+        this.channel.close();
+        for (const [requestId, request] of this.pending) {
+            clearTimeout(request.timer);
+            request.cancel?.dispose();
+            request.resolve({ approved: false, exitCode: null, output: '', error: 'Editor encerrado' });
+            this.channel.postMessage({ type: 'ai-cancel', requestId });
+        }
+        this.pending.clear();
+    }
+}
+
 async function activate(context) {
     if (!(await hasNativeHost())) return;
     if (typeof vscode.workspace?.registerFileSystemProvider === 'function' &&
@@ -282,6 +373,15 @@ async function activate(context) {
             // vscode.openFolder uses the original Code OSS workspace implementation.
             await vscode.commands.executeCommand('vscode.openFolder',
                 vscode.Uri.from({ scheme: FILES_SCHEME, path: '/' }), false);
+        }));
+    }
+    if (typeof vscode.lm?.registerTool === 'function' &&
+        typeof vscode.LanguageModelToolResult === 'function' &&
+        typeof vscode.LanguageModelTextPart === 'function') {
+        const tool = new SevenAndroidAgentShell();
+        context.subscriptions.push(tool);
+        context.subscriptions.push(vscode.lm.registerTool(AI_TOOL_ID, {
+            invoke(options, token) { return tool.invoke(options, token); }
         }));
     }
     context.subscriptions.push(vscode.window.registerTerminalProfileProvider('sevenCode.android.local', {

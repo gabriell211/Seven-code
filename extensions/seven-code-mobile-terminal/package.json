@@ -3,7 +3,7 @@
   "displayName": "Seven Code Mobile Terminal",
   "description": "Terminal Android integrado ao workbench original do Seven Code.",
   "publisher": "seven-code",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "license": "MIT",
   "engines": {
@@ -41,6 +41,31 @@
         "command": "sevenCode.openAndroidFolder",
         "title": "Seven Code: Abrir pasta do celular",
         "category": "Seven Code"
+      }
+    ],
+    "languageModelTools": [
+      {
+        "name": "seven_code_run_android_shell",
+        "toolReferenceName": "androidTerminal",
+        "displayName": "Run command on Android",
+        "modelDescription": "Run a shell command in the Android phone's app sandbox after explicit native user approval. Only use when the user specifically intends to execute on their Android device. This is /system/bin/sh, not bash on the remote VS Code server. Files selected through Android Storage Access Framework are not available as regular POSIX paths. Do not run without approval; inspect exit code and output.",
+        "userDescription": "Execute commands on your phone's Android terminal after approving each command.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "command": {
+              "type": "string",
+              "description": "Full shell command shown to the user for approval; no implicit execution."
+            },
+            "timeoutMs": {
+              "type": "integer",
+              "description": "Execution time limit 1000 to 120000 milliseconds. Default 60000."
+            }
+          },
+          "required": [
+            "command"
+          ]
+        }
       }
     ]
   }

@@ -24,6 +24,17 @@ const host = window.SevenTerminalNative;
 if (host && typeof BroadcastChannel !== 'undefined') {
     const channel = new BroadcastChannel('seven-code-mobile-terminal-v1');
     const files = new BroadcastChannel('seven-code-mobile-files-v1');
+    const ai = new BroadcastChannel('seven-code-mobile-ai-v1');
+    ai.onmessage = event => {
+        const data: unknown = event.data;
+        if (!data || typeof data !== 'object' || !('type' in data) ||
+            !['ai-propose', 'ai-cancel'].includes(String(data.type)) ||
+            !('requestId' in data) || typeof data.requestId !== 'string' ||
+            !/^[a-zA-Z0-9_-]{1,64}$/.test(data.requestId)) {
+            return;
+        }
+        host.postMessage(JSON.stringify(data));
+    };
     const fileOps = new Set(['select', 'status', 'stat', 'list', 'read', 'mkdir', 'delete', 'rename', 'write-begin', 'write-chunk', 'write-commit', 'write-abort']);
     files.onmessage = event => {
         const data: unknown = event.data;
@@ -55,6 +66,11 @@ if (host && typeof BroadcastChannel !== 'undefined') {
         host.postMessage(JSON.stringify(data));
     };
     window.sevenNativeEvent = event => {
+        if (event && event.type === 'ai-result' &&
+            typeof event.requestId === 'string' && /^[a-zA-Z0-9_-]{1,64}$/.test(event.requestId)) {
+            ai.postMessage(event);
+            return;
+        }
         if (event && event.type === 'fs-result' &&
             typeof event.requestId === 'string' && /^[a-zA-Z0-9_-]{1,64}$/.test(event.requestId)) {
             files.postMessage(event);
@@ -69,6 +85,7 @@ if (host && typeof BroadcastChannel !== 'undefined') {
         window.sevenNativeEvent = undefined;
         channel.close();
         files.close();
+        ai.close();
     }, { once: true });
 }
 export {};
