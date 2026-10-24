@@ -14,10 +14,12 @@ test('full GNU single APK device test uses actual prebuilt 300 MB artifact and n
   assert.ok(workflow.includes('script: bash .seven/android/run-gnu-apk-e2e.sh'));
   assert.match(bash, /adb install -r -t/);
   assert.match(bash, /set -euo pipefail/);
-  assert.ok(bash.includes('debug.keystore'));
+  assert.ok(bash.includes('seven-gnu-e2e.keystore'));
+  assert.ok(bash.includes('keytool -genkeypair'));
+  assert.ok(bash.includes('test -n "$app_cert" && test "$app_cert" = "$test_cert"'));
   assert.ok(bash.includes('apksigner'));
   assert.ok(bash.includes('verify-gnu-apk.py'));
-  assert.ok(bash.includes('same ephemeral debug key'));
+  assert.ok(bash.includes('same certificate'));
 
   assert.match(bash, /arm64-v8a/);
   assert.match(workflow, /verify-gnu-apk\.py/);

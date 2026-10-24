@@ -13,24 +13,41 @@ adb shell df -h /data
 app="$RUNNER_TEMP/experimental-apk/SevenCode-gnu-arm64-EXPERIMENTAL-debug.apk"
 test -s "$app"
 test -s mobile/android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
-# The release/debug APK was built in a DIFFERENT GitHub Actions runner.
-# Every runner creates its own default debug key. Android instrumentation is
-# forbidden across signing identities, even when both APKs are genuine.
-# Re-sign ONLY this CI copy with the same ephemeral debug key that Gradle used
-# for app-debug-androidTest.apk; do not overwrite or release the original APK.
-keystore="$HOME/.android/debug.keystore"
+# Both APKs originate from different CI runners. A separate instrumentation
+# process MUST use the exact same certificate as the installed target package.
+# Generate one ephemeral CI-only key, then re-sign BOTH APK copies to it.
+# No original APK is modified or published, and neither key nor password is a
+# distributable production credential.
+keystore="$RUNNER_TEMP/seven-gnu-e2e.keystore"
 signer="$ANDROID_HOME/build-tools/36.0.0/apksigner"
-test -s "$keystore"
-test -x "$signer"
+test -x "$signer" || { echo "::error::apksigner missing"; exit 1; }
+keytool -genkeypair -noprompt -alias sevengnue2e -keyalg RSA -keysize 2048 \
+  -validity 14 -dname "CN=SevenCode GNU E2E DEBUG" \
+  -keystore "$keystore" -storepass android -keypass android >/dev/null 2>&1
+test -s "$keystore" || { echo "::error::Could not create fresh CI-only Android signing key"; exit 1; }
 instrumented="$RUNNER_TEMP/SevenCode-gnu-original-e2e-debug-resigned.apk"
+test_input="mobile/android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk"
+test_signed="$RUNNER_TEMP/SevenCode-gnu-e2e-instrumentation-resigned.apk"
 "$signer" sign \
-  --ks "$keystore" --ks-key-alias androiddebugkey \
+  --ks "$keystore" --ks-key-alias sevengnue2e \
   --ks-pass pass:android --key-pass pass:android \
   --out "$instrumented" "$app"
+"$signer" sign \
+  --ks "$keystore" --ks-key-alias sevengnue2e \
+  --ks-pass pass:android --key-pass pass:android \
+  --out "$test_signed" "$test_input"
 "$signer" verify --verbose "$instrumented"
+"$signer" verify --verbose "$test_signed"
+# Make the instrumentation signature requirement auditable before adb install.
+app_cert=$("$signer" verify --print-certs "$instrumented" | grep -m1 'SHA-256 digest:')
+test_cert=$("$signer" verify --print-certs "$test_signed" | grep -m1 'SHA-256 digest:')
+test -n "$app_cert" && test "$app_cert" = "$test_cert" || {
+  echo "::error::Android instrumentation and full Code OSS APK signatures differ"
+  exit 1
+}
 python3 .seven/android/verify-gnu-apk.py "$instrumented"
 adb install -r -t "$instrumented"
-adb install -r -t mobile/android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+adb install -r -t "$test_signed"
 
 # Test the editor delivered by the *single original 300+ MB APK*, not a fake
 # remote browser or a standalone .html test fixture. Keep the result in CI.
