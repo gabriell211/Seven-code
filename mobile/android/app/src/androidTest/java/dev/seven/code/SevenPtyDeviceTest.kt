@@ -1,11 +1,6 @@
 package dev.seven.code
 
-import android.content.Context
 import android.net.Uri
-import android.view.ViewGroup
-import android.widget.Button
-import android.widget.EditText
-import android.widget.LinearLayout
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -41,22 +36,41 @@ class SevenPtyDeviceTest {
     }
 
     @Test
-    fun appStartsAndRejectsNonHttpsWorkbench() {
-        val context = InstrumentationRegistry.getInstrumentation().targetContext
-        context.getSharedPreferences("MainActivity", Context.MODE_PRIVATE)
-            .edit().remove("workbenchUrl").commit()
+    fun appStartsLocallyAndRejectsUntrustedServerUrls() {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             scenario.onActivity { activity ->
-                val root = activity.findViewById<ViewGroup>(android.R.id.content)
-                val layout = root.getChildAt(0) as LinearLayout
-                val widgets = (0 until layout.childCount).map { layout.getChildAt(it) }
-                val field = widgets.filterIsInstance<EditText>().single()
-                val button = widgets.filterIsInstance<Button>().single()
-                field.setText("http://unsafe.example")
-                button.performClick()
-                assertTrue("HTTP workbench must be rejected", field.error != null)
+                // No remote-server setup field exists on the production UI.
+                // Security-sensitive URL parsing must reject untrusted HTTP
+                // even before the embedded Node server finishes booting.
+                val parse = MainActivity::class.java.getDeclaredMethod(
+                    "parseWorkbenchUrl", String::class.java
+                )
+                parse.isAccessible = true
+                assertNull(parse.invoke(activity, "http://unsafe.example"))
+                assertNull(parse.invoke(activity, "http://localhost:8080"))
+                assertNull(parse.invoke(activity, "http://127.0.0.1:1/?tkn=untrusted"))
+
+                // The startup screen is a local Code OSS bootstrap/error state,
+                // not an editable URL form. Its content may change asynchronously.
+                val root = activity.findViewById<android.view.ViewGroup>(
+                    android.R.id.content
+                )
+                assertTrue("Android bootstrap root is missing", root.childCount > 0)
+                assertFalse(
+                    "Production Android app must not request a server URL",
+                    containsServerAddressField(root)
+                )
             }
         }
+    }
+
+    private fun containsServerAddressField(root: android.view.ViewGroup): Boolean {
+        for (index in 0 until root.childCount) {
+            val child = root.getChildAt(index)
+            if (child is android.widget.EditText) return true
+            if (child is android.view.ViewGroup && containsServerAddressField(child)) return true
+        }
+        return false
     }
 
     @Test
