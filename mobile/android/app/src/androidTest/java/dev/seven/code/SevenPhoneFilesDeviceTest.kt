@@ -4,6 +4,7 @@ import android.app.Activity
 import android.net.Uri
 import android.provider.DocumentsContract
 import android.util.Base64
+import androidx.documentfile.provider.DocumentFile
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -12,6 +13,7 @@ import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -112,6 +114,31 @@ class SevenPhoneFilesDeviceTest {
             }
             assertEquals(bytes.size.toLong(),
                 operation(provider, "statMovedCi", "stat", "/$renamed").getLong("size"))
+
+            // A different phone app can edit the same user-selected SAF file.
+            // A stale editor write must not silently overwrite those changes.
+            operation(provider, "conflictCi", "write-begin", "/$renamed")
+            operation(provider, "conflictCi", "write-chunk", "/$renamed") {
+                it.put("data", Base64.encodeToString(bytes, Base64.NO_WRAP))
+            }
+            val actualTree = Uri.parse(persisted!!)
+            val nativeFile = DocumentFile.fromTreeUri(context, actualTree)!!.findFile(renamed)!!
+            val externalBytes = "changed on the phone outside the editor".toByteArray(StandardCharsets.UTF_8)
+            context.contentResolver.openOutputStream(nativeFile.uri, "wt")!!.use {
+                it.write(externalBytes)
+            }
+            val rejected = provider.process(JSONObject()
+                .put("requestId", "conflictCi")
+                .put("op", "write-commit")
+                .put("path", "/$renamed"))
+            assertFalse("Stale save overwrote another app: $rejected", rejected.optBoolean("ok"))
+            val current = operation(provider, "postConflictCi", "read", "/$renamed") {
+                it.put("offset", 0).put("length", 32768)
+            }
+            assertEquals("External change must survive a rejected stale save",
+                String(externalBytes, StandardCharsets.UTF_8),
+                String(Base64.decode(current.getString("data"), Base64.NO_WRAP),
+                    StandardCharsets.UTF_8))
             operation(provider, "deleteCi", "delete", "/$renamed")
 
             // Selection remains valid after the main Android activity recreates.
