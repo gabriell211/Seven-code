@@ -171,5 +171,8 @@ try {
 		await exited;
 		clearTimeout(forceKill);
 	}
-	await rm(dataDir, { recursive: true, force: true });
+	// The server's remote extension hosts can still be closing settings files
+	// after the parent has exited. Retry ENOTEMPTY/EBUSY instead of turning a
+	// fully passing browser E2E into a false negative during temp cleanup.
+	await rm(dataDir, { recursive: true, force: true, maxRetries: 40, retryDelay: 250 });
 }
