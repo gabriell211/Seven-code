@@ -30,6 +30,9 @@ jobs:
           node --test .seven/tests/single-apk-release.test.mjs
           node --check .seven/require-single-apk-release.mjs
           python -m py_compile .seven/verify-standalone-apk.py
+          python -m py_compile .seven/android/fetch-bionic-node.py
+          python -m py_compile .seven/android/audit-codeoss-abi.py
+          bash -n mobile/android/tools/build-bionic-addons.sh
           node --test .seven/tests/android-apk-package.test.mjs
           python -m py_compile .seven/render-icons.py
           python - <<'PY'
