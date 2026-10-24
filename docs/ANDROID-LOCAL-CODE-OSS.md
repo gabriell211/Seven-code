@@ -40,15 +40,52 @@ the five critical, open-source Node modules for Android ARM64: `node-pty`,
 Android APK**. The standalone packager intentionally aborts when it finds
 remaining GNU/Linux libraries.
 
-Remaining glibc-dependent ELF binaries reported by the standalone
-verification, before the last two open-source NDK modules were replaced:
+### Actual NDK qualification — six Code OSS modules
+
+Android NDK compilation now **passed** for node-pty, @parcel/watcher,
+@vscode/sqlite3, @vscode/spdlog, @vscode/native-watchdog and kerberos 2.1.1.
+The Kerberos package consumes 12 signed Termux packages, verifies their
+transitive dependency closure, compiles the Android N-API binding and
+packages 85 native library files with their SHA-256 in a provenance manifest.
+
+- [NDK with Kerberos verified](https://github.com/gabriell211/Seven-code/actions/runs/40056060369)
+- [Standalone merge verified 108 Bionic shared libraries, then correctly rejected Copilot](https://github.com/gabriell211/Seven-code/actions/runs/40056251478)
+
+**Remaining Code OSS ELF incompatibilities:** exactly four upstream
+GitHub Copilot prebuilds from Linux ARM64; these cannot be silently
+relabelled as Android-native:
 
 - `extensions/copilot/node_modules/@github/copilot/sdk/prebuilds/linux-arm64/runtime.node`
 - `extensions/copilot/node_modules/@github/copilot/sdk/prebuilds/linux-arm64/cli-native.node`
 - `node_modules/@github/copilot-sdk-linux-arm64/prebuilds/linux-arm64/runtime.node`
 - `node_modules/@github/copilot-sdk-linux-arm64/prebuilds/linux-arm64/copilot-runtime`
-- `node_modules/kerberos/build/Release/kerberos.node`
-- `node_modules/kerberos/build/Release/obj.target/kerberos.node`
+
+### Copilot ARM64 glibc ABI research — not production
+
+An explicitly isolated CI experiment is studying the **original upstream
+Copilot binaries** without modifying them or replacing their behavior.
+The `.seven/android/experimental-glibc` directory contains:
+
+- MIT-licensed glibc versioned-symbol forwarders and Bionic shim, with the
+  original VSCodroid license and copyright intact
+- ISC-licensed `libucontext` AArch64 assembly and source, with its original
+  license and upstream revision
+- A small `secure_getenv` adapter preserving GNU secure-execution semantics
+
+[Copilot .node ELF ABI probe (passed)](https://github.com/gabriell211/Seven-code/actions/runs/40056708102):
+the Android NDK produced 16 KiB-aligned Bionic ARM64 shim objects whose
+versioned symbols statically resolve the three existing Copilot `.node`
+modules' GNU/Linux imports. **This is only link-feasibility evidence**.
+The experiment uses Android API 30, while Seven Code targets minSdk 26,
+so the results are not approved for distribution even on ABI grounds.
+
+The fourth file, `copilot-runtime`, is a **Linux executable** with a
+foreign ELF interpreter and different startup requirements; a Bionic
+`.node` loader shim does not make it executable on Android. Until this
+is resolved and genuine OAuth, completions, Chat and Agent Mode are tested
+on an ARM64 Android device, the normal strict ELF audit and single-APK
+release qualification **must reject the binary**. Do not bypass or weaken
+these gates based on the experimental CI's green status.
 
 The Copilot native runtime prebuilds are **not interchangeable with Android
 Bionic binaries**. A legitimate Android implementation or appropriately
