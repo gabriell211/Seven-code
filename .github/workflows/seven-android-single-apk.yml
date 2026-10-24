@@ -73,7 +73,17 @@ jobs:
         if: github.event_name == 'workflow_run'
         run: |
           set -euo pipefail
-          test "$GITHUB_SHA" = "${{ steps.source.outputs.source_sha }}" || echo "::notice::Workflow source SHA differs from current build scripts; exact runtime artifacts still paired by upstream run."
+          source_sha="${{ steps.source.outputs.source_sha }}"
+          # The workflow may be newer than the compiled source. This is only
+          # safe if all editor, native app and extensions are byte-for-byte
+          # unchanged; workflow/docs/tooling changes alone are allowed.
+          if ! git diff --quiet "$source_sha" HEAD -- \
+            src/vs/workbench mobile/android/app mobile/android/terminal \
+            extensions/seven-code-mobile-terminal extensions/copilot \
+            remote build/gulpfile.reh.ts product.json; then
+            echo "::error::Code OSS compiled source differs from the Android source being packaged. Rebuild ARM64 against the latest commit."
+            exit 1
+          fi
           mkdir -p "$RUNNER_TEMP/inputs"
           server="$RUNNER_TEMP/inputs/vscode-reh-web-linux-arm64"
           bionic="$RUNNER_TEMP/inputs/seven-bionic"
@@ -81,6 +91,7 @@ jobs:
           tar -xzf "$RUNNER_TEMP/upstream/SevenCode-Node-Android-Bionic-arm64/SevenCode-Node-Android-Bionic-arm64.tar.gz" -C "$RUNNER_TEMP/inputs"
           test -s "$server/out/server-main.js"
           test -s "$bionic/libnode.so"
+          node -e "const p=require(process.argv[1]+'/product.json');if(p.commit!==process.argv[2])throw new Error('Compiled Code OSS source SHA differs from upstream build run')" "$server" "$source_sha"
           mkdir -p "$server/node_modules/node-pty/build/Release"
           mkdir -p "$server/node_modules/@parcel/watcher/build/Release"
           mkdir -p "$server/node_modules/@vscode/sqlite3/build/Release"
