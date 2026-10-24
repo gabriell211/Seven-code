@@ -45,6 +45,8 @@ jobs:
           node --test .seven/tests/android-final-release-policy.test.mjs
           node --check .seven/package-android-gnu-experiment.mjs
           node --test .seven/tests/android-gnu-apk-experiment.test.mjs
+          node --test .seven/tests/android-gnu-device-e2e.test.mjs
+          python -m py_compile .seven/android/verify-gnu-apk.py
           python -m py_compile .seven/render-icons.py
           python - <<'PY'
           import xml.etree.ElementTree as ET

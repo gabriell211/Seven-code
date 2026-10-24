@@ -1,0 +1,136 @@
+name: Seven Code Android - GNU single APK real workbench on emulator
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/seven-android-gnu-device-e2e.yml"
+      - "mobile/android/app/src/androidTest/java/dev/seven/code/SevenStandaloneGnuDeviceTest.kt"
+      - ".seven/android/verify-gnu-apk.py"
+  workflow_run:
+    workflows: ["Seven Code Android - experimental isolated GNU ARM64 single APK"]
+    types: [completed]
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  installed-gnu-apk:
+    if: >-
+      github.event_name == 'push' ||
+      (
+        github.event_name == 'workflow_run' &&
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.head_branch == 'main' &&
+        github.event.workflow_run.head_repository.full_name == github.repository
+      )
+    runs-on: ubuntu-24.04
+    timeout-minutes: 70
+    name: Install actual 300MB APK and open original Code OSS locally (NO release)
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Find source-matched successful experimental APK only
+        id: apk_source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == workflow_run ]]; then
+            run_id="${{ github.event.workflow_run.id }}"
+            source_sha="${{ github.event.workflow_run.head_sha }}"
+          else
+            run_id=""
+            source_sha=""
+            while read -r candidate_id candidate_sha; do
+              [[ "$candidate_sha" =~ ^[0-9a-f]{40}$ ]] || continue
+              git fetch --no-tags --depth=1 origin "$candidate_sha"
+              if git diff --quiet "$candidate_sha" HEAD -- \
+                mobile/android/app/src/main mobile/android/terminal \
+                mobile/android/app/build.gradle.kts mobile/android/settings.gradle.kts \
+                .seven/package-android-gnu-experiment.mjs \
+                .github/workflows/seven-android-gnu-apk-experiment.yml; then
+                run_id="$candidate_id"
+                source_sha="$candidate_sha"
+                break
+              fi
+            done < <(
+              gh api "repos/$GITHUB_REPOSITORY/actions/workflows/seven-android-gnu-apk-experiment.yml/runs?branch=main&status=success&per_page=25" \
+                --jq '.workflow_runs[] | "\(.id) \(.head_sha)"'
+            )
+            test -n "$run_id" || {
+              echo "::error::No verified current-app experimental GNU APK available. Build the complete single APK first."
+              exit 1
+            }
+          fi
+          git fetch --no-tags --depth=1 origin "$source_sha"
+          if ! git diff --quiet "$source_sha" HEAD -- \
+            mobile/android/app/src/main mobile/android/terminal \
+            mobile/android/app/build.gradle.kts mobile/android/settings.gradle.kts \
+            .seven/package-android-gnu-experiment.mjs; then
+            echo "::error::The downloaded APK predates actual app runtime changes; never test a stale app."
+            exit 1
+          fi
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+          echo "source_sha=$source_sha" >> "$GITHUB_OUTPUT"
+      - uses: actions/download-artifact@v4
+        with:
+          run-id: ${{ steps.apk_source.outputs.run_id }}
+          name: SevenCode-gnu-Android-arm64-EXPERIMENTAL-debug-only
+          path: ${{ runner.temp }}/experimental-apk
+          github-token: ${{ github.token }}
+      - name: Verify actual APK contains original editor, runtime and unmodified Copilot ELF
+        run: |
+          set -euo pipefail
+          apk="$RUNNER_TEMP/experimental-apk/SevenCode-gnu-arm64-EXPERIMENTAL-debug.apk"
+          test -s "$apk"
+          python3 .seven/android/verify-gnu-apk.py "$apk"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v4
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.13"
+      - name: Compile only the Android instrumentation test APK, not a thin standalone app
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses > /dev/null || true
+          sdkmanager "platforms;android-36" "build-tools;36.0.0" "cmake;3.22.1" "ndk;27.2.12479018"
+          gradle -p mobile/android :app:assembleDebugAndroidTest --no-daemon --stacktrace
+          test -s mobile/android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+      - name: Enable hardware virtualization for API35 Android emulator
+        run: |
+          test -e /dev/kvm || { echo "::error::KVM is missing"; exit 1; }
+          sudo chmod 666 /dev/kvm
+      - name: Boot Android 35 and exercise ONLY the downloaded full experimental APK
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_5
+          emulator-boot-timeout: 600
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -partition-size 8192 -memory 3072
+          script: |
+            set -euo pipefail
+            abi=$(adb shell getprop ro.product.cpu.abilist | tr -d '\r')
+            echo "Android ABI availability: $abi"
+            if [[ "$abi" != *arm64-v8a* ]]; then
+              echo "::error::This emulator lacks ARM64 translation. Cannot validate the original ARM64 GNU Code OSS; an ARM64 Android device/runner is mandatory."
+              exit 1
+            fi
+            adb shell df -h /data
+            adb install -r -t "$RUNNER_TEMP/experimental-apk/SevenCode-gnu-arm64-EXPERIMENTAL-debug.apk"
+            adb install -r -t mobile/android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+            adb shell am instrument -w -r \
+              -e class dev.seven.code.SevenStandaloneGnuDeviceTest \
+              dev.seven.code.test/androidx.test.runner.AndroidJUnitRunner \
+              | tee "$RUNNER_TEMP/gnu-android-instrumentation.txt"
+            grep -Fq "OK (1 test)" "$RUNNER_TEMP/gnu-android-instrumentation.txt"
+            grep -Fq "INSTRUMENTATION_CODE: -1" "$RUNNER_TEMP/gnu-android-instrumentation.txt"
+            echo "Real original local Code OSS workbench ran in installed Android APK."
+            echo "This still does NOT prove real authenticated Copilot OAuth or production eligibility."
