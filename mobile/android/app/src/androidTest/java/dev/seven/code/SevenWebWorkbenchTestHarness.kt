@@ -12,6 +12,9 @@ internal object SevenWebWorkbenchTestHarness {
 
         val open = MainActivity::class.java.getDeclaredMethod("openWorkbench", String::class.java)
         open.isAccessible = true
-        open.invoke(activity, url)
+        check(url.startsWith("https://appassets.androidplatform.net/")) {
+            "Instrumentation harness may only load the app asset origin"
+        }
+        open.invoke(activity, "https://appassets.androidplatform.net/assets/seven-web/index.html")
     }
 }
