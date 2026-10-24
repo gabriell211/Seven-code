@@ -1,0 +1,118 @@
+name: Seven Code Android - experimental isolated GNU ARM64 single APK
+
+on:
+  workflow_run:
+    workflows: ["Seven Code Android - research isolated GNU ARM64 Copilot process"]
+    types: [completed]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  gnu-android-experiment:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    name: Assemble ONE local Code OSS + Copilot GNU Android experiment (NOT release)
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v4
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.13"
+      - name: Prepare native Android and archive build tools
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses > /dev/null || true
+          sdkmanager "platforms;android-36" "build-tools;36.0.0" "cmake;3.22.1" "ndk;27.2.12479018"
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq binutils zip unzip
+      - name: Download precisely qualified GNU ARM64 research closure
+        uses: actions/download-artifact@v4
+        with:
+          name: SevenCode-GNU-arm64-separate-process-research-only
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/gnu-input
+      - name: Validate original GNU ELF source and exact compiled Code OSS run
+        id: original
+        run: |
+          set -euo pipefail
+          test -s "$RUNNER_TEMP/gnu-input/gnu-runtime-research.tar.gz"
+          tar -xzf "$RUNNER_TEMP/gnu-input/gnu-runtime-research.tar.gz" -C "$RUNNER_TEMP"
+          manifest="$RUNNER_TEMP/gnu-runtime/manifest.json"
+          test -s "$manifest"
+          run_id=$(node -e "const m=require(process.argv[1]);if(m.androidVerified!==false||m.releaseEligible!==false||!Number.isSafeInteger(m.codeossRunId))process.exit(1);console.log(m.codeossRunId)" "$manifest")
+          source_sha=$(node -e "const m=require(process.argv[1]);if(!/^[a-f0-9]{40}$/.test(m.sourceSha))process.exit(1);console.log(m.sourceSha)" "$manifest")
+          test -s "$RUNNER_TEMP/gnu-runtime/ld-linux-aarch64.so.1"
+          test -s "$RUNNER_TEMP/gnu-runtime/node"
+          git fetch --no-tags --depth=1 origin "$source_sha"
+          if ! git diff --quiet "$source_sha" HEAD -- \
+            .github/workflows/seven-android-codeoss-arm64.yml \
+            src extensions remote build mobile/android product.json \
+            package.json package-lock.json .nvmrc; then
+            echo "::error::GNU runtime is not from the current Android/editor source. Rebuild the complete Code OSS runtime."
+            exit 1
+          fi
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+          echo "source_sha=$source_sha" >> "$GITHUB_OUTPUT"
+      - name: Download original Code OSS server used for this GNU research
+        uses: actions/download-artifact@v4
+        with:
+          name: SevenCode-CodeOSS-linux-arm64-build
+          run-id: ${{ steps.original.outputs.run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/codeoss-input
+      - name: Install ORIGINAL Code OSS plus GNU library closure into Android APK
+        run: |
+          set -euo pipefail
+          test -s "$RUNNER_TEMP/codeoss-input/SevenCode-CodeOSS-linux-arm64-build.tar.gz"
+          mkdir -p "$RUNNER_TEMP/staging"
+          tar -xzf "$RUNNER_TEMP/codeoss-input/SevenCode-CodeOSS-linux-arm64-build.tar.gz" -C "$RUNNER_TEMP/staging"
+          server="$RUNNER_TEMP/staging/vscode-reh-web-linux-arm64"
+          test -s "$server/out/server-main.js"
+          node -e "const p=require(process.argv[1]);if(p.commit!==process.argv[2])process.exit(1)" "$server/product.json" "${{ steps.original.outputs.source_sha }}"
+          test -s "$server/LICENSE.txt" || cp LICENSE.txt "$server/LICENSE.txt"
+          test -s "$server/ThirdPartyNotices.txt" || cp ThirdPartyNotices.txt "$server/ThirdPartyNotices.txt"
+          node .seven/package-android-gnu-experiment.mjs "$server" "$RUNNER_TEMP/gnu-runtime"
+          # This deliberately targets a side-load-only Android debug experiment.
+          # On Android targetSdk >= 29, W^X blocks mapping executable native
+          # ELF addons extracted into writable private storage. Keep production
+          # targetSdk=35 unchanged in the repository and forbid any release.
+          grep -q 'targetSdk = 35' mobile/android/app/build.gradle.kts
+          sed -i 's/targetSdk = 35/targetSdk = 28/' mobile/android/app/build.gradle.kts
+          grep -q 'targetSdk = 28' mobile/android/app/build.gradle.kts
+          gradle -p mobile/android :app:assembleDebug --no-daemon --stacktrace
+          apk=mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          test -s "$apk"
+          test "$(stat -c %s "$apk")" -gt 30000000
+          unzip -Z1 "$apk" | grep -Fx 'assets/seven-local/server.zip'
+          unzip -Z1 "$apk" | grep -Fx 'assets/seven-local/gnu-libs.zip'
+          unzip -Z1 "$apk" | grep -Fx 'assets/seven-local/gnu-manifest.json'
+          unzip -Z1 "$apk" | grep -Fx 'lib/arm64-v8a/libseven-gnu-loader.so'
+          unzip -Z1 "$apk" | grep -Fx 'lib/arm64-v8a/libseven-gnu-node.so'
+          node .seven/verify-android-apk.mjs
+          mkdir -p "$RUNNER_TEMP/experiment"
+          cp "$apk" "$RUNNER_TEMP/experiment/SevenCode-gnu-arm64-EXPERIMENTAL-debug.apk"
+          echo "ONE experimental APK built. This is not production ready, not E2E accepted and MUST NOT be a GitHub release."
+      - name: Store a single installable Android debugging artifact, never a release
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SevenCode-gnu-Android-arm64-EXPERIMENTAL-debug-only
+          path: ${{ runner.temp }}/experiment/SevenCode-gnu-arm64-EXPERIMENTAL-debug.apk
+          retention-days: 7
+          if-no-files-found: error
