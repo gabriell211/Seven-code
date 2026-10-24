@@ -96,7 +96,11 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           script: |
             adb shell mkdir -p /sdcard/Documents/SevenCodeCi
-            gradle -p mobile/android :app:connectedDebugAndroidTest --no-daemon --stacktrace
+            # Keep the native PTY regression suite independent of the 300MB
+            # original-Code-OSS-only GNU test, which the dedicated workflow
+            # must execute against the bundled standalone APK instead.
+            gradle -p mobile/android :app:connectedDebugAndroidTest --no-daemon --stacktrace \
+              -Pandroid.testInstrumentationRunnerArguments.notClass=dev.seven.code.SevenStandaloneGnuDeviceTest
       - uses: actions/upload-artifact@v4
         with:
           name: SevenCode-android-debug-apk

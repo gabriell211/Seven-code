@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 const workflow = readFileSync('.github/workflows/seven-android-gnu-device-e2e.yml', 'utf8');
 const bash = readFileSync('.seven/android/run-gnu-apk-e2e.sh', 'utf8');
 const android = readFileSync('mobile/android/app/src/androidTest/java/dev/seven/code/SevenStandaloneGnuDeviceTest.kt', 'utf8');
+const terminalWorkflow = readFileSync('.github/workflows/seven-mobile-android.yml', 'utf8');
 
 test('full GNU single APK device test uses actual prebuilt 300 MB artifact and no faux editor', () => {
   assert.match(workflow, /SevenCode-gnu-Android-arm64-EXPERIMENTAL-debug-only/);
@@ -33,4 +34,9 @@ test('passing an emulator does not claim Copilot OAuth or final release', () => 
   assert.ok(bash.includes('Copilot OAuth/Agent E2E'));
   assert.match(workflow, /NO release/);
   assert.doesNotMatch(workflow, /gh release create/);
+});
+
+test('native PTY emulator never runs full GNU editor E2E against a thin test APK', () => {
+  assert.ok(terminalWorkflow.includes('android.testInstrumentationRunnerArguments.notClass=dev.seven.code.SevenStandaloneGnuDeviceTest'));
+  assert.ok(bash.includes('-e class dev.seven.code.SevenStandaloneGnuDeviceTest'));
 });
