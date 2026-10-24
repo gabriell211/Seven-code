@@ -103,7 +103,7 @@ test('Android Copilot contribution uses original Chat command and advertises gen
     assert.ok(manifest.contributes.commands.some(x => x.command === 'sevenCode.openCopilotChat'));
     assert.ok(manifest.contributes.commands.some(x => x.command === 'sevenCode.copilotStatus'));
     assert.match(extension, /workbench.action.chat.open/);
-    assert.doesNotMatch(extension, /fetch\\(['"]https:\/\/api.github.com\/copilot/);
+    assert.equal(extension.includes('https://api.github.com/copilot'), false);
 });
 
 test('Copilot Chat opens original Code OSS panel and reports missing Node extension honestly', async () => {
