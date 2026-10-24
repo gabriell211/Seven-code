@@ -17,6 +17,7 @@ import java.net.Socket
 import java.security.MessageDigest
 import java.security.SecureRandom
 import java.util.zip.ZipInputStream
+import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
 
 /**
@@ -88,6 +89,38 @@ internal class SevenLocalCodeOssServer(private val context: Context) {
                 if (!stopped) onComplete(result)
             }
         }
+    }
+
+    /**
+     * A real Android process probe, not an ELF header or a Linux-runner smoke
+     * test. Check the original GNU Node --version before launching Code OSS.
+     * Failure means the app/runtime is still NOT release-eligible.
+     */
+    private fun probeGnuNode(launch: SevenLocalGnuRuntime.Launch) {
+        bootPhase("probe-original-gnu-node-on-android")
+        val probe = ProcessBuilder(launch.prefix + "--version")
+            .directory(root)
+            .redirectErrorStream(true)
+        probe.environment().apply {
+            put("LD_LIBRARY_PATH", launch.libraryPath)
+            put("HOME", context.filesDir.absolutePath)
+            put("TMPDIR", context.cacheDir.absolutePath)
+            put("NODE_OPTIONS", "--require=${launch.bootstrap.absolutePath}")
+        }
+        val child = probe.start()
+        val finished = child.waitFor(15, TimeUnit.SECONDS)
+        if (!finished) {
+            child.destroyForcibly()
+            child.waitFor(3, TimeUnit.SECONDS)
+            error("Original GNU Node --version excedeu 15 segundos no Android.")
+        }
+        val output = child.inputStream.bufferedReader().use { it.readText().take(800) }
+            .replace(Regex("[a-fA-F0-9]{64}"), "[redacted-local-token]")
+            .replace(Regex("[\\r\\n]+"), " ").take(220)
+        check(child.exitValue() == 0 && output.contains(Regex("v[0-9]+\\.[0-9]+"))) {
+            "Node GNU ARM64 não executou no Android: exit=${child.exitValue()}; output=$output"
+        }
+        bootPhase("original-gnu-node-runs-on-android")
     }
 
     private fun startVerifiedLocalServer(): String {
@@ -166,6 +199,7 @@ internal class SevenLocalCodeOssServer(private val context: Context) {
         bootPhase(if (useGnu) "verify-and-extract-gnu-runtime" else "verify-bionic-runtime")
         val gnuLaunch = if (useGnu) gnuRuntime.prepare(serverDir) else null
         bootPhase("native-runtime-verified")
+        if (gnuLaunch != null) probeGnuNode(gnuLaunch)
         val nativeLibraryDirectory = if (gnuLaunch == null) unpackTermuxNativeLibraries() else null
         val log = File(root, "server.log")
         val expectedCommit = JSONObject(File(serverDir, "product.json").readText()).getString("commit")
@@ -219,8 +253,16 @@ internal class SevenLocalCodeOssServer(private val context: Context) {
             }
             Thread.sleep(200)
         }
+        val exit = if (started.isAlive) "timeout-while-alive" else {
+            "exit=${runCatching { started.exitValue() }.getOrNull()}"
+        }
+        val tail = runCatching {
+            if (log.isFile) log.readText().takeLast(600) else "<no-server-log>"
+        }.getOrDefault("<unreadable-server-log>")
+            .replace(Regex("[a-fA-F0-9]{64}"), "[redacted-local-token]")
+            .replace(Regex("[\\r\\n\\t]+"), " ")
         stop()
-        error("O servidor Code OSS local não iniciou. Consulte os logs do aplicativo.")
+        error("O servidor original do Code OSS não iniciou no Android ($exit): " + tail.take(350))
     }
 
     private fun unpackTermuxNativeLibraries(): File {
