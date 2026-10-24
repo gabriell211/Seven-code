@@ -21,9 +21,9 @@ test -s "$BIONIC/provenance.json"
 NDK="${ANDROID_NDK_HOME:-${ANDROID_NDK_ROOT:-}}"
 test -n "$NDK" && test -d "$NDK" || { echo "Android NDK missing" >&2; exit 1; }
 TOOLCHAIN="$NDK/toolchains/llvm/prebuilt/linux-x86_64"
-test -x "$TOOLCHAIN/bin/aarch64-linux-android28-clang++"
-CC="$TOOLCHAIN/bin/aarch64-linux-android28-clang"
-CXX="$TOOLCHAIN/bin/aarch64-linux-android28-clang++"
+test -x "$TOOLCHAIN/bin/aarch64-linux-android26-clang++"
+CC="$TOOLCHAIN/bin/aarch64-linux-android26-clang"
+CXX="$TOOLCHAIN/bin/aarch64-linux-android26-clang++"
 STRIP="$TOOLCHAIN/bin/llvm-strip"
 
 VERSION="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["node"])' "$BIONIC/provenance.json")"
@@ -88,8 +88,13 @@ verify() {
   if readelf -d "$file" | grep -Eq 'libc\.so\.6|libstdc\+\+\.so\.6'; then
     echo "Illegal glibc linkage: $file" >&2; exit 1
   fi
-  readelf -Wl "$file" | awk '/LOAD/{if (strtonum($NF)<16384) bad=1} END{exit bad}' 2>/dev/null ||
-    echo "::warning::Check ELF 16KB alignment for $file on the target Android device"
+  python3 - "$file" <<'PY'
+import subprocess, sys
+text = subprocess.check_output(["readelf", "-Wl", sys.argv[1]], text=True)
+segments = [x for x in text.splitlines() if x.strip().startswith("LOAD ")]
+if not segments or any(int(x.split()[-1], 0) < 16384 for x in segments):
+    raise SystemExit("Bionic addon must have 16 KiB ELF LOAD alignment: " + sys.argv[1])
+PY
 }
 
 PTY_VERSION="$(get_version node-pty)"
