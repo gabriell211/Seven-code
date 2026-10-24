@@ -13,7 +13,23 @@ adb shell df -h /data
 app="$RUNNER_TEMP/experimental-apk/SevenCode-gnu-arm64-EXPERIMENTAL-debug.apk"
 test -s "$app"
 test -s mobile/android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
-adb install -r -t "$app"
+# The release/debug APK was built in a DIFFERENT GitHub Actions runner.
+# Every runner creates its own default debug key. Android instrumentation is
+# forbidden across signing identities, even when both APKs are genuine.
+# Re-sign ONLY this CI copy with the same ephemeral debug key that Gradle used
+# for app-debug-androidTest.apk; do not overwrite or release the original APK.
+keystore="$HOME/.android/debug.keystore"
+signer="$ANDROID_HOME/build-tools/36.0.0/apksigner"
+test -s "$keystore"
+test -x "$signer"
+instrumented="$RUNNER_TEMP/SevenCode-gnu-original-e2e-debug-resigned.apk"
+"$signer" sign \
+  --ks "$keystore" --ks-key-alias androiddebugkey \
+  --ks-pass pass:android --key-pass pass:android \
+  --out "$instrumented" "$app"
+"$signer" verify --verbose "$instrumented"
+python3 .seven/android/verify-gnu-apk.py "$instrumented"
+adb install -r -t "$instrumented"
 adb install -r -t mobile/android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
 
 # Test the editor delivered by the *single original 300+ MB APK*, not a fake

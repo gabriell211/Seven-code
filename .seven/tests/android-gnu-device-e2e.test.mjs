@@ -14,6 +14,11 @@ test('full GNU single APK device test uses actual prebuilt 300 MB artifact and n
   assert.ok(workflow.includes('script: bash .seven/android/run-gnu-apk-e2e.sh'));
   assert.match(bash, /adb install -r -t/);
   assert.match(bash, /set -euo pipefail/);
+  assert.ok(bash.includes('debug.keystore'));
+  assert.ok(bash.includes('apksigner'));
+  assert.ok(bash.includes('verify-gnu-apk.py'));
+  assert.ok(bash.includes('same ephemeral debug key'));
+
   assert.match(bash, /arm64-v8a/);
   assert.match(workflow, /verify-gnu-apk\.py/);
   assert.match(workflow, /android-emulator-runner@v2/);
