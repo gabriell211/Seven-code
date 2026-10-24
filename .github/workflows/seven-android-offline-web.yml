@@ -69,7 +69,7 @@ jobs:
           set -euo pipefail
           node .seven/package-android-web.mjs ../vscode-web
           node --test .seven/tests/android-web-bundle.test.mjs
-          test -s mobile/android/app/src/main/assets/seven-web/out/vs/code/browser/workbench/workbench.js
+          test -s mobile/android/app/src/main/assets/seven-web/out/vs/workbench/workbench.web.main.internal.js
       - name: Build APK with Android native PTY and embedded Code OSS Web UI
         run: gradle -p mobile/android :app:assembleDebug --no-daemon --stacktrace
       - name: Reject WebView-only shell or broken/unrendered editor assets

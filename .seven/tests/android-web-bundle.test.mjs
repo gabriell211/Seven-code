@@ -10,21 +10,27 @@ test('Android packages ORIGINAL static Code OSS web workbench with no URL prompt
   const compiled = join(dir, 'vscode-web');
   const destination = join(dir, 'android-assets');
   try {
-    const out = join(compiled, 'out/vs/code/browser/workbench');
+    const out = join(compiled, 'out/vs/workbench');
     mkdirSync(out, { recursive: true });
-    writeFileSync(join(out, 'workbench.js'), Buffer.alloc(1_000_001, 33));
-    writeFileSync(join(out, 'workbench.css'), '.monaco-workbench{display:block}');
+    writeFileSync(join(out, 'workbench.web.main.internal.js'), Buffer.alloc(1_000_001, 33));
+    writeFileSync(join(out, 'workbench.web.main.internal.css'), '.monaco-workbench{display:block}');
     writeFileSync(join(compiled, 'out/nls.messages.js'), 'globalThis._VSCODE_NLS_MESSAGES=[];');
     execFileSync(process.execPath, [
       '.seven/package-android-web.mjs', compiled, destination,
     ], { encoding: 'utf8' });
     const html = readFileSync(join(destination, 'index.html'), 'utf8');
-    assert.match(html, /id="vscode-workbench-web-configuration"/);
-    assert.match(html, /seven-web\/out\/vs\/code\/browser\/workbench\/workbench\.js/);
-    assert.match(html, /seven-web\/out\/nls\.messages\.js/);
+    const bootstrap = readFileSync(join(destination, 'bootstrap.js'), 'utf8');
+    assert.match(html, /id="seven-code-root"/);
+    assert.match(bootstrap, /workbench\.web\.main\.internal\.js/);
+    assert.match(html, /workbench\.web\.main\.internal\.css/);
+    assert.match(bootstrap, /out\/nls\.messages\.js/);
     assert.doesNotMatch(html, /\{\{WORKBENCH_/);
     assert.doesNotMatch(html, /remoteAuthority|https:\/\/vscode\.dev|127\.0\.0\.1/);
-    assert.ok(existsSync(join(destination, 'out/vs/code/browser/workbench/workbench.js')));
+    assert.ok(existsSync(join(destination, 'out/vs/workbench/workbench.web.main.internal.js')));
+    assert.ok(existsSync(join(destination, 'extensions/seven-code-mobile-terminal/package.json')));
+    assert.ok(existsSync(join(destination, 'extensions/seven-code-mobile-terminal/dist/browser/extension.js')));
+    assert.match(bootstrap, /additionalBuiltinExtensions/);
+    assert.match(bootstrap, /seven-code-mobile-terminal/);
     const metadata = JSON.parse(readFileSync(join(destination, 'bundle.json'), 'utf8'));
     assert.equal(metadata.noNodeRequiredForUi, true);
     assert.equal(metadata.remoteNodeExtensions, false);
