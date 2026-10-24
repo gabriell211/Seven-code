@@ -125,6 +125,7 @@ internal class SevenLocalCodeOssServer(private val context: Context) {
         val token = randomToken.joinToString("") { "%02x".format(it) }
         val port = ServerSocket(0, 1, InetAddress.getByName("127.0.0.1")).use { it.localPort }
         val url = "http://127.0.0.1:$port/?tkn=$token"
+        val nativeLibraryDirectory = unpackTermuxNativeLibraries()
         val log = File(root, "server.log")
         val expectedCommit = JSONObject(File(serverDir, "product.json").readText()).getString("commit")
         check(expectedCommit.matches(Regex("[a-f0-9]{40}"))) {
@@ -150,7 +151,8 @@ internal class SevenLocalCodeOssServer(private val context: Context) {
             put("TMPDIR", context.cacheDir.absolutePath)
             put("XDG_CONFIG_HOME", File(root, "config").absolutePath)
             put("XDG_CACHE_HOME", File(root, "cache").absolutePath)
-            put("LD_LIBRARY_PATH", context.applicationInfo.nativeLibraryDir)
+            put("LD_LIBRARY_PATH", nativeLibraryDirectory.absolutePath + ":" +
+                context.applicationInfo.nativeLibraryDir)
         }
         val started = env.start()
         process = started
@@ -167,6 +169,60 @@ internal class SevenLocalCodeOssServer(private val context: Context) {
         }
         stop()
         error("O servidor Code OSS local não iniciou. Consulte os logs do aplicativo.")
+    }
+
+    private fun unpackTermuxNativeLibraries(): File {
+        val dest = File(root, "native-libs")
+        val asset = "seven-local/native-libs.zip"
+        check(dest.isDirectory || dest.mkdirs()) {
+            "Não foi possível preparar bibliotecas Android/Bionic."
+        }
+        val manifest = JSONObject(context.assets.open("seven-local/termux-provenance.json")
+            .bufferedReader().use { it.readText() })
+        val expectedLibraries = manifest.getJSONObject("libraries")
+        val found = HashSet<String>()
+        var bytes = 0L
+        var files = 0
+        context.assets.open(asset).use { input ->
+            ZipInputStream(input).use { zip ->
+                while (true) {
+                    val entry = zip.nextEntry ?: break
+                    val name = entry.name
+                    check(!entry.isDirectory &&
+                        name.matches(Regex("[A-Za-z0-9._+\\-]{1,255}")) &&
+                        name.contains(".so") &&
+                        expectedLibraries.has(name) && found.add(name)) {
+                        "Biblioteca Bionic inesperada ou duplicada."
+                    }
+                    files++
+                    check(files <= 128) { "Bibliotecas Android demais." }
+                    val outputFile = File(dest, name)
+                    val digest = MessageDigest.getInstance("SHA-256")
+                    outputFile.outputStream().use { output ->
+                        val buffer = ByteArray(32 * 1024)
+                        while (true) {
+                            val count = zip.read(buffer)
+                            if (count < 0) break
+                            bytes += count
+                            check(bytes <= 256_000_000L) {
+                                "Bibliotecas Android grandes demais."
+                            }
+                            digest.update(buffer, 0, count)
+                            output.write(buffer, 0, count)
+                        }
+                    }
+                    val actual = digest.digest().joinToString("") { "%02x".format(it) }
+                    check(actual.equals(expectedLibraries.getString(name), true)) {
+                        "SHA-256 de biblioteca Android inválido: $name"
+                    }
+                    zip.closeEntry()
+                }
+            }
+        }
+        check(found.size == expectedLibraries.length()) {
+            "O APK não contém todas as bibliotecas exigidas pelo Node Android."
+        }
+        return dest
     }
 
     private fun hasServerReadinessBanner(log: File, port: Int): Boolean {

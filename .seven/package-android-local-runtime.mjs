@@ -70,6 +70,13 @@ function scanBinaries(dir) {
 }
 scanBinaries(serverDir);
 if (scanned === 0) fatal('No Android native ELF components found in the server; missing extension host runtime.');
+// Linux ARM64 and Android ARM64 execute the same ISA, but native .node addons
+// and helper binaries must NEVER carry glibc DT_NEEDED or symbol versions.
+// Verify every ELF scanned above, then require actual Android components.
+execFileSync('python3', [
+    join(projectRoot, '.seven/android/audit-codeoss-abi.py'),
+    serverDir, '--stage', 'android-bionic'
+], { stdio: 'inherit', timeout: 60_000 });
 const assets = join(projectRoot, 'mobile/android/app/src/main/assets/seven-local');
 const jni = join(projectRoot, 'mobile/android/app/src/main/jniLibs/arm64-v8a');
 mkdirSync(assets, { recursive: true });
@@ -95,6 +102,15 @@ const hash = sha.digest('hex');
 writeFileSync(join(assets, 'server.sha256'), hash + '\n');
 copyFileSync(nodeNotice, join(assets, 'NOTICE-node.txt'));
 copyFileSync(nodePath, join(jni, 'libnode.so'));
+// Versioned SONAMEs such as libicuuc.so.78 cannot be emitted as regular
+// Android jniLibs/*.so. Package a Bionic-validated library ZIP instead and
+// extract it into a private LD_LIBRARY_PATH directory at launch.
+if (deps && existsSync(join(deps, 'android-libs.zip'))) {
+    copyFileSync(join(deps, 'android-libs.zip'), join(assets, 'native-libs.zip'));
+    if (existsSync(join(deps, 'provenance.json'))) {
+        copyFileSync(join(deps, 'provenance.json'), join(assets, 'termux-provenance.json'));
+    }
+}
 if (deps) {
     for (const lib of readdirSync(deps)) {
         if (!lib.endsWith('.so')) continue;
