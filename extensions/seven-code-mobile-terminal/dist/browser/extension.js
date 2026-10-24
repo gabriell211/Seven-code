@@ -144,8 +144,146 @@ async function hasNativeHost() {
     });
 }
 
+
+/* FileSystemProvider is registered in the original Code OSS web extension host.
+ * The real bytes remain under a user-selected Android SAF document tree. */
+const FILES_CHANNEL = 'seven-code-mobile-files-v1';
+const FILES_SCHEME = 'sevenmobile';
+const FILE_LIMIT = 10 * 1024 * 1024;
+const CHUNK = 32 * 1024;
+
+class SevenAndroidDocuments {
+    constructor() {
+        this.channel = new BroadcastChannel(FILES_CHANNEL);
+        this.pending = new Map();
+        this.changed = new vscode.EventEmitter();
+        this.onDidChangeFile = this.changed.event;
+        this.channel.onmessage = event => {
+            const response = event.data;
+            if (response?.type !== 'fs-result' || typeof response.requestId !== 'string') return;
+            const item = this.pending.get(response.requestId);
+            if (!item) return;
+            this.pending.delete(response.requestId);
+            clearTimeout(item.timer);
+            if (!response.ok) item.reject(new Error(String(response.error || 'Erro ao acessar pasta Android')));
+            else item.resolve(response.value);
+        };
+    }
+    request(op, path = '/', extras = {}, id = crypto.randomUUID().replace(/-/g, ''), timeout = 30000) {
+        if (this.pending.has(id)) return Promise.reject(new Error('Requisição anterior em andamento'));
+        return new Promise((resolve, reject) => {
+            const timer = setTimeout(() => {
+                this.pending.delete(id);
+                reject(new Error('Android não respondeu à operação de arquivos'));
+            }, timeout);
+            this.pending.set(id, { resolve, reject, timer });
+            this.channel.postMessage({ type: 'fs-request', op, requestId: id, path, ...extras });
+        });
+    }
+    emitChange(uri, type) {
+        this.changed.fire([{ type, uri }]);
+    }
+    watch() { return new vscode.Disposable(() => {}); }
+    async stat(uri) {
+        const r = await this.request('stat', uri.path);
+        return {
+            type: r.type === 'directory' ? vscode.FileType.Directory : vscode.FileType.File,
+            ctime: 0, mtime: Number(r.mtime) || 0, size: Number(r.size) || 0
+        };
+    }
+    async readDirectory(uri) {
+        const r = await this.request('list', uri.path);
+        return r.entries.map(x => [
+            x.name, x.type === 'directory' ? vscode.FileType.Directory : vscode.FileType.File
+        ]);
+    }
+    async readFile(uri) {
+        const meta = await this.stat(uri);
+        if (meta.type !== vscode.FileType.File) throw vscode.FileSystemError.FileIsADirectory(uri);
+        if (meta.size > FILE_LIMIT) throw vscode.FileSystemError.Unavailable('Arquivo excede 10 MiB no bridge Android');
+        const result = new Uint8Array(meta.size);
+        let offset = 0;
+        while (offset < result.length) {
+            const chunk = await this.request('read', uri.path, { offset, length: CHUNK });
+            const bytes = Uint8Array.from(atob(chunk.data), c => c.charCodeAt(0));
+            if (!bytes.length) throw vscode.FileSystemError.Unavailable('Leitura incompleta do Android');
+            if (Number(chunk.size) !== result.length || bytes.length > result.length - offset) {
+                throw vscode.FileSystemError.Unavailable('Arquivo foi modificado durante a leitura');
+            }
+            result.set(bytes, offset);
+            offset += bytes.length;
+        }
+        return result;
+    }
+    async writeFile(uri, content, options) {
+        if (content.byteLength > FILE_LIMIT) throw vscode.FileSystemError.Unavailable('Arquivo excede 10 MiB');
+        let existing;
+        try { existing = await this.stat(uri); }
+        catch (error) {
+            // SAF reports missing files explicitly; never suppress permission failures.
+            if (!String(error).includes('Arquivo não encontrado')) throw error;
+        }
+        if (existing && !options.overwrite) throw vscode.FileSystemError.FileExists(uri);
+        if (!existing && !options.create) throw vscode.FileSystemError.FileNotFound(uri);
+        if (existing?.type === vscode.FileType.Directory) throw vscode.FileSystemError.FileIsADirectory(uri);
+        const writeId = crypto.randomUUID().replace(/-/g, '');
+        await this.request('write-begin', uri.path, {}, writeId);
+        try {
+            for (let i = 0; i < content.length; i += CHUNK) {
+                let binary = '';
+                for (const byte of content.subarray(i, i + CHUNK)) binary += String.fromCharCode(byte);
+                await this.request('write-chunk', uri.path, { data: btoa(binary) }, writeId);
+            }
+            await this.request('write-commit', uri.path, {}, writeId);
+        } catch (error) {
+            await this.request('write-abort', uri.path, {}, writeId).catch(() => {});
+            throw error;
+        }
+        this.emitChange(uri, existing ? vscode.FileChangeType.Changed : vscode.FileChangeType.Created);
+    }
+    async createDirectory(uri) {
+        await this.request('mkdir', uri.path);
+        this.emitChange(uri, vscode.FileChangeType.Created);
+    }
+    async delete(uri, options) {
+        await this.request('delete', uri.path, { recursive: !!options.recursive });
+        this.emitChange(uri, vscode.FileChangeType.Deleted);
+    }
+    async rename(oldUri, newUri, options) {
+        if (options.overwrite) throw vscode.FileSystemError.Unavailable('Não sobrescrever arquivos ao renomear no Android');
+        await this.request('rename', oldUri.path, { target: newUri.path });
+        this.changed.fire([
+            { type: vscode.FileChangeType.Deleted, uri: oldUri },
+            { type: vscode.FileChangeType.Created, uri: newUri }
+        ]);
+    }
+    dispose() {
+        this.channel.close();
+        for (const entry of this.pending.values()) {
+            clearTimeout(entry.timer);
+            entry.reject(new Error('Ponte Android encerrada'));
+        }
+        this.pending.clear();
+        this.changed.dispose();
+    }
+}
+
 async function activate(context) {
     if (!(await hasNativeHost())) return;
+    if (typeof vscode.workspace?.registerFileSystemProvider === 'function' &&
+        typeof vscode.commands?.registerCommand === 'function') {
+        const files = new SevenAndroidDocuments();
+        context.subscriptions.push(files);
+        context.subscriptions.push(vscode.workspace.registerFileSystemProvider(FILES_SCHEME, files, {
+            isCaseSensitive: true, isReadonly: false
+        }));
+        context.subscriptions.push(vscode.commands.registerCommand('sevenCode.openAndroidFolder', async () => {
+            await files.request('select', '/', {}, undefined, 180000);
+            // vscode.openFolder uses the original Code OSS workspace implementation.
+            await vscode.commands.executeCommand('vscode.openFolder',
+                vscode.Uri.from({ scheme: FILES_SCHEME, path: '/' }), false);
+        }));
+    }
     context.subscriptions.push(vscode.window.registerTerminalProfileProvider('sevenCode.android.local', {
         provideTerminalProfile() {
             return new vscode.TerminalProfile({

@@ -3,7 +3,7 @@
   "displayName": "Seven Code Mobile Terminal",
   "description": "Terminal Android integrado ao workbench original do Seven Code.",
   "publisher": "seven-code",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "license": "MIT",
   "engines": {
@@ -14,7 +14,8 @@
     "ui"
   ],
   "activationEvents": [
-    "onStartupFinished"
+    "onStartupFinished",
+    "onCommand:sevenCode.openAndroidFolder"
   ],
   "capabilities": {
     "virtualWorkspaces": true,
@@ -34,6 +35,13 @@
           "icon": "terminal-bash"
         }
       ]
-    }
+    },
+    "commands": [
+      {
+        "command": "sevenCode.openAndroidFolder",
+        "title": "Seven Code: Abrir pasta do celular",
+        "category": "Seven Code"
+      }
+    ]
   }
 }
