@@ -22,6 +22,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
+import androidx.webkit.WebViewAssetLoader
 import dev.seven.code.terminal.SevenPty
 import org.json.JSONObject
 import java.io.IOException
@@ -53,14 +54,32 @@ class MainActivity : Activity() {
     private var pendingExternalConsent = false
     private var localServer: SevenLocalCodeOssServer? = null
     private lateinit var mobileDocuments: SevenMobileDocuments
+    private val webAssetLoader by lazy {
+        WebViewAssetLoader.Builder()
+            .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this))
+            .build()
+    }
+    private val embeddedWebUrl =
+        "https://appassets.androidplatform.net/assets/seven-web/index.html"
+
+    private fun hasEmbeddedWebWorkbench(): Boolean = try {
+        assets.open("seven-web/index.html").use { true }
+    } catch (_: IOException) {
+        false
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         localServer = SevenLocalCodeOssServer(this)
         mobileDocuments = SevenMobileDocuments(this)
-        // Never ask for a remote URL: incomplete development APKs must fail
-        // clearly rather than masquerade as a standalone Code OSS install.
-        startLocalWorkbench()
+        // Prefer the real compiled Code OSS browser workbench embedded in APK.
+        // Browser UI needs no Node runtime, URL setup or remote server.
+        // Legacy self-hosted builds without Web assets keep the old runtime path.
+        if (hasEmbeddedWebWorkbench()) {
+            openWorkbench(embeddedWebUrl)
+        } else {
+            startLocalWorkbench()
+        }
     }
 
     private fun startLocalWorkbench() {
@@ -184,6 +203,14 @@ class MainActivity : Activity() {
             }
 
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
+                // appassets.androidplatform.net is an HTTPS virtual origin, not
+                // an external service. Serve only APK resources via AssetLoader.
+                if (request.url.scheme == "https" &&
+                    request.url.host == "appassets.androidplatform.net") {
+                    return webAssetLoader.shouldInterceptRequest(request.url)
+                        ?: WebResourceResponse("text/plain", "UTF-8", 404, "Not Found",
+                            emptyMap(), ByteArrayInputStream(ByteArray(0)))
+                }
                 if (request.url.scheme == "http" &&
                     request.url.scheme + "://" + request.url.host + ":" + request.url.port !=
                         localServer?.localOrigin) return WebResourceResponse(

@@ -4,6 +4,12 @@ Editor multiplataforma baseado no [Code - OSS](https://github.com/microsoft/vsco
 
 > **Estado em 23/10/2026:** fonte Code - OSS importada na `main` e identidade Seven Code aplicada. A aplicação Android carrega o Code OSS Web Workbench original, com perfil de PTY nativo, e há um projeto iOS com build de simulador aprovado. A execução real do workbench e das extensões em servidor autenticado ainda requer homologação.
 
+## Experimento Android Web offline (24/10/2026)
+
+A nova rota `seven-android-offline-web.yml` testa a abordagem de **compilar o Web Workbench original** via `npm run gulp vscode-web-min`, incluir seus recursos no APK e carregar `https://appassets.androidplatform.net/assets/seven-web/index.html` por `WebViewAssetLoader`, sem iniciar Node.js somente para exibir a interface nem pedir URL ao usuário.
+
+O bundle também inclui avisos de licença. O terminal PTY nativo continua protegido por autorização de sessão. **Este é um experimento separado da release oficial**: a publicação de APK só como *artifact* de CI depende da compilação completa, inspeção dos bytes empacotados e prova de abertura real no emulador. O código Web isolado não fornece, por si só, filesystem de projetos Android plenamente integrado, extensões Node.js, GitHub Copilot autenticado, depuradores ou compiladores nativos. Nenhuma release estável é autorizada apenas por esse build.
+
 ## Status real da release Android
 
 **A versão `v0.1.0-alpha.3` é uma prévia, não um VS Code completo para uso sem configuração.** Seu APK de aproximadamente 1,46 MB contém o host Android/WebView e o terminal PTY; o workbench Code OSS e os hosts de extensões vêm do servidor Linux publicado separadamente, que precisa ser instalado e protegido com HTTPS/autenticação. Não há um servidor pré-configurado e a conta Copilot ainda não passou por E2E em dispositivo.

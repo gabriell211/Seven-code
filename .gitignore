@@ -62,3 +62,6 @@ dist
 /mobile/android/app/src/main/assets/seven-local/server.sha256
 /mobile/android/app/src/main/assets/seven-local/NOTICE-node.txt
 /mobile/android/app/src/main/jniLibs/
+
+# Code OSS Web bundle generated only by the Android offline Web build.
+/mobile/android/app/src/main/assets/seven-web/
