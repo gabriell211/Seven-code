@@ -32,6 +32,12 @@ jobs:
           python -m py_compile .seven/verify-standalone-apk.py
           python -m py_compile .seven/android/fetch-bionic-node.py
           python -m py_compile .seven/android/audit-codeoss-abi.py
+          python -m py_compile .seven/android/fetch-android-kerberos.py
+          python -m py_compile .seven/android/merge-kerberos-runtime.py
+          python -m unittest discover -s .seven/android -p 'test_*.py'
+          python -m py_compile .seven/android/experimental-glibc/gen-glibc-forwarders.py
+          python -m py_compile .seven/android/experimental-glibc/verify-android-elf.py
+          bash -n .seven/android/experimental-glibc/build-glibc-shim.sh
           bash -n mobile/android/tools/build-bionic-addons.sh
           node --test .seven/tests/android-apk-package.test.mjs
           python -m py_compile .seven/render-icons.py
