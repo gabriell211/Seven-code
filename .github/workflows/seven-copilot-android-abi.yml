@@ -14,7 +14,11 @@ permissions:
 
 jobs:
   abi-probe:
-    name: Probe original Copilot ARM64 glibc native ABI against Android/Bionic
+    name: Probe Copilot ELF ARM64/Bionic at Android API ${{ matrix.api_level }}
+    strategy:
+      fail-fast: false
+      matrix:
+        api_level: [26, 30]
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -59,6 +63,7 @@ jobs:
         env:
           OUT_DIR: ${{ runner.temp }}/copilot-abi/native
           WORK_DIR: ${{ runner.temp }}/glibc-shim-work
+          ANDROID_API: ${{ matrix.api_level }}
         run: |
           set -euo pipefail
           export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/27.2.12479018"
@@ -77,7 +82,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: SevenCode-Copilot-Android-ELF-ABI-research-only
+          name: SevenCode-Copilot-Android-ELF-ABI-api${{ matrix.api_level }}-research-only
           path: ${{ runner.temp }}/copilot-abi
           retention-days: 7
           if-no-files-found: warn
