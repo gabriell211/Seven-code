@@ -50,9 +50,18 @@ class MainActivity : Activity() {
     private var workbenchActive = false
     private val popupWindows = mutableSetOf<WebView>()
     private var pendingExternalConsent = false
+    private var localServer: SevenLocalCodeOssServer? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        localServer = SevenLocalCodeOssServer(this)
+        // A complete Android-compatible Code OSS bundle boots directly into
+        // the upstream workbench, without asking the user for an HTTPS URL.
+        if (localServer?.hasBundle() == true) {
+            startLocalWorkbench()
+            return
+        }
+        // Existing remote-only developer builds retain explicit configuration.
         val savedUrl = getPreferences(MODE_PRIVATE).getString("workbenchUrl", null)
         if (savedUrl == null || parseWorkbenchUrl(savedUrl) == null) {
             showServerSetup()
@@ -61,10 +70,55 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun startLocalWorkbench() {
+        setContentView(TextView(this).apply {
+            text = "Seven Code\n\nIniciando o editor Code OSS no celular..."
+            textSize = 20f
+            setPadding(32, 64, 32, 32)
+        })
+        localServer?.start { result ->
+            if (isFinishing || isDestroyed) return@start
+            result.fold(
+                onSuccess = { openWorkbench(it) },
+                onFailure = { showLocalStartupFailure(it.message ?: "Falha ao iniciar o Code OSS local.") }
+            )
+        }
+    }
+
+    private fun showLocalStartupFailure(reason: String) {
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(32, 48, 32, 32)
+        }
+        layout.addView(TextView(this).apply {
+            text = "O editor local não iniciou.\n\n" + reason +
+                "\n\nNenhum outro servidor será escolhido sem sua autorização."
+            textSize = 17f
+        })
+        layout.addView(Button(this).apply {
+            text = "Tentar abrir o editor novamente"
+            setOnClickListener { startLocalWorkbench() }
+        })
+        layout.addView(Button(this).apply {
+            text = "Usar um servidor Code OSS externo"
+            setOnClickListener { showServerSetup(reason) }
+        })
+        setContentView(layout)
+    }
+
     private fun parseWorkbenchUrl(raw: String): Pair<String, String>? {
         val uri = Uri.parse(raw.trim())
-        if (uri.scheme != "https" || uri.host.isNullOrBlank() || uri.userInfo != null ||
+        if (uri.host.isNullOrBlank() || uri.userInfo != null ||
             uri.fragment != null || uri.port > 65535 || uri.port == 0) return null
+        // HTTP is trusted only for the per-app Node server on 127.0.0.1.
+        // Never expose the native terminal to arbitrary insecure websites.
+        if (uri.scheme == "http") {
+            val origin = localServer?.localOrigin ?: return null
+            val requested = "http://" + uri.host!!.lowercase() + ":" + uri.port
+            if (uri.host != "127.0.0.1" || requested != origin) return null
+            return origin to uri.toString()
+        }
+        if (uri.scheme != "https") return null
         if (uri.host!!.contains("..")) return null
         val host = uri.host!!.lowercase()
         val port = if (uri.port == -1 || uri.port == 443) "" else ":" + uri.port
@@ -73,6 +127,7 @@ class MainActivity : Activity() {
 
     private fun showServerSetup(error: String? = null) {
         // Revoke bridge access before leaving the trusted workbench screen.
+        localServer?.stop()
         workbenchActive = false
         trustedOrigin = ""
         closeWorkbenchTerminals()
@@ -191,7 +246,9 @@ class MainActivity : Activity() {
             }
 
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
-                if (request.url.scheme == "http") return WebResourceResponse(
+                if (request.url.scheme == "http" &&
+                    request.url.scheme + "://" + request.url.host + ":" + request.url.port !=
+                        localServer?.localOrigin) return WebResourceResponse(
                     "text/plain", "UTF-8", 403, "Blocked insecure request",
                     emptyMap(), ByteArrayInputStream(ByteArray(0))
                 )
@@ -322,8 +379,11 @@ class MainActivity : Activity() {
         showingConnectionError = true
         AlertDialog.Builder(this)
             .setTitle("Não foi possível abrir o Seven Code")
-            .setMessage(reason + "\n\nO aplicativo precisa do servidor Code OSS original " +
-                "em uma conexão HTTPS autenticada.")
+            .setMessage(reason + if (localServer?.localOrigin == null) {
+                "\n\nO aplicativo precisa de um servidor Code OSS autenticado por HTTPS."
+            } else {
+                "\n\nO servidor Code OSS local precisa continuar em execução no aplicativo."
+            })
             .setPositiveButton("Tentar novamente") { _, _ ->
                 if (::webView.isInitialized) webView.reload()
             }
@@ -520,6 +580,7 @@ class MainActivity : Activity() {
         closeWorkbenchTerminals()
         aiRunner?.cancel()
         aiRunner = null
+        localServer?.stop()
         if (::webView.isInitialized) webView.destroy()
         super.onDestroy()
     }
