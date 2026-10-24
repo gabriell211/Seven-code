@@ -29,6 +29,22 @@ jobs:
           node --test .seven/tests/release-qualification.test.mjs
           node --test .seven/tests/android-apk-package.test.mjs
           python -m py_compile .seven/render-icons.py
+          python - <<'PY'
+          import xml.etree.ElementTree as ET
+          ns = '{http://schemas.android.com/apk/res/android}'
+          root = ET.parse('mobile/android/app/src/main/AndroidManifest.xml').getroot()
+          app = root.find('application')
+          assert app is not None
+          assert app.attrib[ns + 'networkSecurityConfig'] == '@xml/network_security_config'
+          assert app.attrib[ns + 'usesCleartextTraffic'] == 'false'
+          config = ET.parse('mobile/android/app/src/main/res/xml/network_security_config.xml').getroot()
+          base = config.find('base-config')
+          assert base is not None and base.attrib['cleartextTrafficPermitted'] == 'false'
+          domains = [(d.text.strip(), d.attrib.get('includeSubdomains', 'false'))
+                     for d in config.findall('./domain-config/domain')]
+          assert domains == [('127.0.0.1', 'false')], domains
+          print('Android manifest and loopback-only network security XML parsed and verified')
+          PY
           if [ ! -f product.json ] || [ ! -f src/vs/workbench/workbench.desktop.main.ts ]; then
             echo "::error::A importação do Code - OSS ainda não foi concluída."
             exit 1
