@@ -142,8 +142,13 @@ class MainActivity : Activity() {
         setContentView(layout)
     }
 
+    // Keep the internal entrypoint used by existing Android instrumentation
+    // while centralizing the security checks in the origin validator above.
+    private fun parseWorkbenchUrl(raw: String): Pair<String, String>? =
+        trustedWorkbenchTarget(raw, localServer?.localOrigin)
+
     private fun openWorkbench(url: String) {
-        val parsed = trustedWorkbenchTarget(url, localServer?.localOrigin) ?: return showLocalStartupFailure("URL local inválida.")
+        val parsed = parseWorkbenchUrl(url) ?: return showLocalStartupFailure("URL local inválida.")
         // Stop authorization for the old web document before replacing its WebView.
         workbenchActive = false
         closeWorkbenchTerminals()
