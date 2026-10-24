@@ -73,9 +73,12 @@ const text = value => value.content[0].value;
 
 test('uses standard VS Code LM tool extension point, never a Copilot fork or hidden shell', () => {
     const contrib = manifest.contributes.languageModelTools;
-    assert.equal(contrib.length, 1);
+    assert.equal(contrib.length, 2);
     assert.equal(contrib[0].name, 'seven_code_run_android_shell');
     assert.equal(contrib[0].inputSchema.required[0], 'command');
+    assert.equal(contrib[1].name, 'seven_code_read_android_workspace_file');
+    assert.equal(contrib[1].inputSchema.required[0], 'path');
+    assert.ok(manifest.contributes.commands.some(x => x.command === 'sevenCode.openCopilotChat'));
     assert.match(bridge, /seven-code-mobile-ai-v1/);
     assert.match(bridge, /host.postMessage\(JSON.stringify\(data\)\)/);
     assert.match(activity, /private fun proposeAiCommand/);
