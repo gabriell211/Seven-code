@@ -146,20 +146,7 @@ internal class SevenLocalGnuRuntime(
         wrapper.writeText(
             "#!/system/bin/sh\n" +
             "exec ${quote(loader.absolutePath)} --library-path ${quote(destination.absolutePath)} " +
-            "${quote(runtime.absolutePath)} \"${'
-        )
-        check(wrapper.setExecutable(true, true)) {
-            "O wrapper GNU do Copilot não pôde receber permissão de execução."
-        }
-        return Launch(
-            prefix = listOf(loader.absolutePath, "--library-path",
-                destination.absolutePath, node.absolutePath),
-            libraryPath = destination.absolutePath,
-            cliWrapper = wrapper
-        )
-    }
-}
-}@\"\n"
+            "${quote(runtime.absolutePath)} \"${'$'}@\"\n"
         )
         check(wrapper.setExecutable(true, true)) {
             "O wrapper GNU do Copilot não pôde receber permissão de execução."
