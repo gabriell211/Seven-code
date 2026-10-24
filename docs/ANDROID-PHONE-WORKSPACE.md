@@ -12,9 +12,11 @@ registrado através da API original `vscode.workspace.registerFileSystemProvider
    disponibilizada pelo provedor local do sistema.
 4. O app solicita e preserva a autorização de leitura/escrita dessa **pasta escolhida**.
    O explorador original do Code OSS usa o workspace `sevenmobile:/`.
-5. Os bytes lidos ou editados transitam somente entre a WebView de origem confiável
-   e a API Storage Access Framework. Os arquivos são gravados na pasta Android
-   escolhida, não no filesystem efêmero da Vercel.
+5. Os arquivos são gravados na pasta Android escolhida, não no
+   filesystem efêmero da Vercel. A ponte acessa o sistema de arquivos
+   local com autorização do usuário, mas extensões, GitHub Copilot e outras
+   funções remotas **podem receber conteúdo de arquivos** para prestar seus
+   serviços. Armazenamento local não é sinônimo de processamento 100% offline.
 
 Se o editor estiver hospedado numa máquina remota, o servidor remoto **não**
 recebe automaticamente acesso ao filesystem privado do Android. O acesso aos
