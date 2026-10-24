@@ -3,7 +3,6 @@ package dev.seven.code
 import android.net.Uri
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -20,11 +19,16 @@ class SevenLocalRuntimeDeviceTest {
     fun developerApkDoesNotPretendToContainCodeOssRuntime() {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             scenario.onActivity { activity ->
-                assertFalse(SevenLocalCodeOssServer(activity).hasBundle())
+                val bundleAvailable = SevenLocalCodeOssServer(activity).hasBundle()
                 val parse = MainActivity::class.java.getDeclaredMethod("parseWorkbenchUrl", String::class.java)
                 parse.isAccessible = true
-                assertNull(parse.invoke(activity, "http://127.0.0.1:8080/?tkn=unauthorized"))
+                // A privileged PTY origin must be the exact currently running
+                // local server, not an arbitrary loopback port.
+                assertNull(parse.invoke(activity, "http://127.0.0.1:1/?tkn=unauthorized"))
                 assertNull(parse.invoke(activity, "http://localhost:8080"))
+                if (!bundleAvailable) {
+                    assertNull(parse.invoke(activity, "http://127.0.0.1:8080/?tkn=unauthorized"))
+                }
                 assertNull(parse.invoke(activity, "http://example.com"))
                 assertTrue(safeExternalHttpsTarget(Uri.parse("https://github.com/login")))
             }

@@ -11,7 +11,7 @@
  */
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, createReadStream, existsSync, mkdirSync, openSync, closeSync, readSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -58,8 +58,11 @@ function scanBinaries(dir) {
         const path = join(dir, item.name);
         if (item.isDirectory()) { scanBinaries(path); continue; }
         if (!item.isFile()) continue;
-        const fd = readFileSync(path).subarray(0, 4);
-        if (fd.length === 4 && fd[0] === 127 && fd[1] === 69 && fd[2] === 76 && fd[3] === 70) {
+        const fd = Buffer.alloc(4);
+        const handle = openSync(path, 'r');
+        let bytes;
+        try { bytes = readSync(handle, fd, 0, 4, 0); } finally { closeSync(handle); }
+        if (bytes === 4 && fd[0] === 127 && fd[1] === 69 && fd[2] === 76 && fd[3] === 70) {
             verifyBionicElf(path);
             scanned++;
         }
@@ -81,7 +84,14 @@ if (zipSize < 30_000_000 || zipSize > 500_000_000) {
     rmSync(archive, { force: true });
     fatal('Code OSS archive size is outside the expected 30-500MB range: ' + zipSize);
 }
-const hash = createHash('sha256').update(readFileSync(archive)).digest('hex');
+const sha = createHash('sha256');
+await new Promise((resolveHash, rejectHash) => {
+    const stream = createReadStream(archive);
+    stream.on('data', chunk => sha.update(chunk));
+    stream.on('error', rejectHash);
+    stream.on('end', resolveHash);
+});
+const hash = sha.digest('hex');
 writeFileSync(join(assets, 'server.sha256'), hash + '\n');
 copyFileSync(nodeNotice, join(assets, 'NOTICE-node.txt'));
 copyFileSync(nodePath, join(jni, 'libnode.so'));

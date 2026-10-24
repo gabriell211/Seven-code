@@ -55,3 +55,10 @@ dist
 .v[0-9]*/
 # Local agent validation evidence
 .agent-validation/
+
+# Generated on-device Code OSS server and Android/Bionic Node ELF are built
+# from verified release inputs; do not commit hundreds of MB of binaries.
+/mobile/android/app/src/main/assets/seven-local/server.zip
+/mobile/android/app/src/main/assets/seven-local/server.sha256
+/mobile/android/app/src/main/assets/seven-local/NOTICE-node.txt
+/mobile/android/app/src/main/jniLibs/
