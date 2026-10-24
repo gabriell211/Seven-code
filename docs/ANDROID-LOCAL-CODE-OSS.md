@@ -30,9 +30,45 @@ unpacks the bundle and boots Code OSS. The embedded Node process is isolated to
 `127.0.0.1` with a random token. Only its exact origin receives the
 `SevenTerminalNative` bridge. Other HTTP domains remain blocked.
 
-**No binary inputs have been supplied to the repository yet.** Current small
-APK preview builds remain remote-only and will continue showing the explicit
-server-configuration screen, rather than falsely claiming to contain Code OSS.
+**Build state — 23 October 2026 (source of truth: GitHub Actions):**
+the full Code OSS REH web workbench **compiled for Linux ARM64**, the
+verified Termux/Android Bionic Node 24.22.1 and its native libraries
+were produced as temporary CI artifacts. The NDK then successfully rebuilt
+the five critical, open-source Node modules for Android ARM64: `node-pty`,
+`@parcel/watcher`, `@vscode/sqlite3`, `@vscode/spdlog`, and
+`@vscode/native-watchdog`. **These are not yet an installable complete
+Android APK**. The standalone packager intentionally aborts when it finds
+remaining GNU/Linux libraries.
+
+Remaining glibc-dependent ELF binaries reported by the standalone
+verification, before the last two open-source NDK modules were replaced:
+
+- `extensions/copilot/node_modules/@github/copilot/sdk/prebuilds/linux-arm64/runtime.node`
+- `extensions/copilot/node_modules/@github/copilot/sdk/prebuilds/linux-arm64/cli-native.node`
+- `node_modules/@github/copilot-sdk-linux-arm64/prebuilds/linux-arm64/runtime.node`
+- `node_modules/@github/copilot-sdk-linux-arm64/prebuilds/linux-arm64/copilot-runtime`
+- `node_modules/kerberos/build/Release/kerberos.node`
+- `node_modules/kerberos/build/Release/obj.target/kerberos.node`
+
+The Copilot native runtime prebuilds are **not interchangeable with Android
+Bionic binaries**. A legitimate Android implementation or appropriately
+licensed, fully embedded compatible runtime is required; copying, renaming,
+excluding or mocking them is **not** proof that Copilot Agent works.
+
+The CI artifact stages are separate **only during compilation**. Any public
+Android release must be **one APK** containing the checked Code OSS, Node
+and dependencies; an APK and remote server archive may not be released
+together. The five legacy release publishers are disabled.
+
+CI evidence:
+- Code OSS ARM64 and signed Bionic Node: [run 40052793301](https://github.com/gabriell211/Seven-code/actions/runs/40052793301)
+- Five open-source Android NDK native modules: [run 40054225003](https://github.com/gabriell211/Seven-code/actions/runs/40054225003)
+- Strict standalone package check (currently blocked by incompatible glibc):
+  [run 40054022465](https://github.com/gabriell211/Seven-code/actions/runs/40054022465)
+
+A passing NDK compile and ABI audit is not a substitute for a real
+arm64 Android cold start, locally saved/edited projects, working Git and
+debuggers, Android terminal and **real Copilot login + agent tool execution**.
 Do not upload a purported standalone release until:
 
 1. Android ARM64 Code OSS and **all** native modules are compiled and run on a
