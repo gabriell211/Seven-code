@@ -36,7 +36,7 @@ jobs:
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ github.token }}
           path: release-assets
-      - name: Refuse stale, incomplete, unsigned or split APK releases
+      - name: Refuse stale, incomplete or split APK inputs
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -54,28 +54,66 @@ jobs:
           sha256sum --check SHA256SUMS.txt
           apk=$(find . -maxdepth 1 -name '*.apk' -type f -print -quit)
           test -n "$apk"
-          # Android Gradle assembleDebug signs with the public Android Debug key.
-          # That is NOT a final distributable application signature.
-          if [[ "$apk" == *debug*.apk ]]; then
-            echo "::error::A debug-signed APK cannot be published as a final release."
-            exit 1
-          fi
-          if ! command -v apksigner >/dev/null 2>&1; then
-            echo "::error::apksigner is required to verify production APK signatures."
-            exit 1
-          fi
-          apksigner verify --verbose "$apk"
-          cert=$(apksigner verify --print-certs "$apk")
-          if echo "$cert" | grep -qi 'android debug'; then
-            echo "::error::Debug signing certificate is not a production identity."
-            exit 1
-          fi
+          test "$(find . -maxdepth 1 -name '*.apk' -type f | wc -l)" -eq 1
+          # Debug builds are input-only. The final step re-signs the complete
+          # APK with a persistent production identity after genuine E2E.
       - name: Require real mobile workbench, authenticated Copilot and native terminal acceptance
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_SHA: ${{ github.event.workflow_run.head_sha }}
           SEVEN_RELEASE_PLATFORM: android
         run: node .seven/require-release-checks.mjs
+      - uses: android-actions/setup-android@v4
+      - name: Install official Android signing and ZIP alignment tools
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses > /dev/null || true
+          sdkmanager "build-tools;36.0.0"
+          test -x "$ANDROID_HOME/build-tools/36.0.0/apksigner"
+          test -x "$ANDROID_HOME/build-tools/36.0.0/zipalign"
+      - name: Replace debug APK with production-signed complete APK
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.SEVEN_ANDROID_RELEASE_KEYSTORE_BASE64 }}
+          RELEASE_KEY_ALIAS: ${{ secrets.SEVEN_ANDROID_RELEASE_KEY_ALIAS }}
+          RELEASE_STORE_PASSWORD: ${{ secrets.SEVEN_ANDROID_RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.SEVEN_ANDROID_RELEASE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for key in RELEASE_KEYSTORE_BASE64 RELEASE_KEY_ALIAS RELEASE_STORE_PASSWORD RELEASE_KEY_PASSWORD; do
+            if test -z "${!key:-}"; then
+              echo "::error::Missing Android signing secret: $key; cannot publish debug-signed binaries."
+              exit 1
+            fi
+          done
+          input="release-assets/SevenCode-Android-arm64-local-debug.apk"
+          test -s "$input"
+          umask 077
+          printf '%s' "$RELEASE_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/seven-release.keystore"
+          align="$ANDROID_HOME/build-tools/36.0.0/zipalign"
+          signer="$ANDROID_HOME/build-tools/36.0.0/apksigner"
+          "$align" -p -f 4 "$input" "$RUNNER_TEMP/SevenCode-aligned.apk"
+          "$signer" sign \
+            --ks "$RUNNER_TEMP/seven-release.keystore" \
+            --ks-key-alias "$RELEASE_KEY_ALIAS" \
+            --ks-pass env:RELEASE_STORE_PASSWORD \
+            --key-pass env:RELEASE_KEY_PASSWORD \
+            --out "$RUNNER_TEMP/SevenCode-Android-arm64-local-release.apk" \
+            "$RUNNER_TEMP/SevenCode-aligned.apk"
+          "$signer" verify --verbose "$RUNNER_TEMP/SevenCode-Android-arm64-local-release.apk"
+          cert=$("$signer" verify --print-certs "$RUNNER_TEMP/SevenCode-Android-arm64-local-release.apk")
+          if echo "$cert" | grep -qi 'android debug'; then
+            echo "::error::Android debug certificate detected; refusing release."
+            exit 1
+          fi
+          rm -f "$input" release-assets/SHA256SUMS.txt
+          cp "$RUNNER_TEMP/SevenCode-Android-arm64-local-release.apk" release-assets/
+          (
+            cd release-assets
+            sha256sum SevenCode-Android-arm64-local-release.apk > SHA256SUMS.txt
+            sha256sum --check SHA256SUMS.txt
+          )
+          node .seven/require-single-apk-release.mjs release-assets
+          rm -f "$RUNNER_TEMP/seven-release.keystore"
       - name: Publish exactly ONE installable APK and its checksum
         env:
           GH_TOKEN: ${{ github.token }}
@@ -88,7 +126,7 @@ jobs:
           }
           test "$(git rev-parse HEAD)" = "$(gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq '.commit.sha')"
           gh release create "$tag" release-assets/*.apk release-assets/SHA256SUMS.txt \
-            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --repo "$GITHUB_REPOSITORY" --target "${{ github.event.workflow_run.head_sha }}" \
             --title "Seven Code Android v0.1.0 — complete local Code OSS" \
             --notes "One self-contained verified Android APK. Includes original Code OSS and native Android terminal. On-device Copilot/OAuth and extension-host E2E acceptance required." \
             --latest=false
