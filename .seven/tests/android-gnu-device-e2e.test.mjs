@@ -60,3 +60,10 @@ test('native PTY emulator never runs full GNU editor E2E against a thin test APK
   assert.ok(terminalWorkflow.includes('android.testInstrumentationRunnerArguments.notClass=dev.seven.code.SevenStandaloneGnuDeviceTest'));
   assert.ok(bash.includes('-e class dev.seven.code.SevenStandaloneGnuDeviceTest'));
 });
+
+test('end-to-end emulator checks wait for successful complete APK and do not race unfinished builds', () => {
+  assert.doesNotMatch(workflow.split('permissions:')[0], /\\n  push:/);
+  assert.ok(workflow.includes("github.event.workflow_run.conclusion == 'success'"));
+  assert.ok(workflow.includes('run-id: ${{ steps.apk_source.outputs.run_id }}'));
+  assert.ok(readFileSync('.github/workflows/seven-android-gnu-apk-experiment.yml', 'utf8').includes('.seven/android/run-gnu-apk-e2e.sh'));
+});

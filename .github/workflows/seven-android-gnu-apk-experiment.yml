@@ -9,6 +9,10 @@ on:
       - "mobile/android/app/build.gradle.kts"
       - ".seven/package-android-gnu-experiment.mjs"
       - ".github/workflows/seven-android-gnu-apk-experiment.yml"
+      - ".github/workflows/seven-android-gnu-device-e2e.yml"
+      - "mobile/android/app/src/androidTest/java/dev/seven/code/SevenStandaloneGnuDeviceTest.kt"
+      - ".seven/android/run-gnu-apk-e2e.sh"
+      - ".seven/android/verify-gnu-apk.py"
   workflow_run:
     workflows: ["Seven Code Android - research isolated GNU ARM64 Copilot process"]
     types: [completed]
