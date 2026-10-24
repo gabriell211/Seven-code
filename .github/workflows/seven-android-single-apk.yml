@@ -50,7 +50,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: SevenCode-Android-Bionic-core-node-addons
-          run-id: ${{ github.event.workflow_run.id || 40053741018 }}
+          run-id: ${{ github.event.workflow_run.id || 40054225003 }}
           github-token: ${{ github.token }}
           path: ${{ runner.temp }}/addons
       - name: Extract source run and pin artifacts to exact revision
@@ -68,6 +68,9 @@ jobs:
           test -s "$RUNNER_TEMP/addons/vscode-sqlite3.node"
           test -s "$RUNNER_TEMP/addons/spdlog.node"
           test -s "$RUNNER_TEMP/addons/watchdog.node"
+          test -s "$RUNNER_TEMP/addons/kerberos.node"
+          test -s "$RUNNER_TEMP/addons/kerberos-libs.zip"
+          test -s "$RUNNER_TEMP/addons/kerberos-provenance.json"
       - name: Fetch original compiled Code OSS and signed Bionic Node for same source run
         if: github.event_name == 'workflow_run' || github.event_name == 'push'
         uses: actions/download-artifact@v4
@@ -113,6 +116,10 @@ jobs:
           mkdir -p "$server/node_modules/@vscode/native-watchdog/build/Release"
           cp "$RUNNER_TEMP/addons/spdlog.node" "$server/node_modules/@vscode/spdlog/build/Release/spdlog.node"
           cp "$RUNNER_TEMP/addons/watchdog.node" "$server/node_modules/@vscode/native-watchdog/build/Release/watchdog.node"
+          mkdir -p "$server/node_modules/kerberos/build/Release/obj.target"
+          cp "$RUNNER_TEMP/addons/kerberos.node" "$server/node_modules/kerberos/build/Release/kerberos.node"
+          cp "$RUNNER_TEMP/addons/kerberos.node" "$server/node_modules/kerberos/build/Release/obj.target/kerberos.node"
+          python3 .seven/android/merge-kerberos-runtime.py "$bionic" "$RUNNER_TEMP/addons"
           # Code OSS gulp bundles a GNU/Linux Node executable. Android uses
           # the verified Bionic libnode.so shipped in the APK, never that ELF.
           rm -f "$server/node"
