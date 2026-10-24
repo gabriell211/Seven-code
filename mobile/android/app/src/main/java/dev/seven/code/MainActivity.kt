@@ -46,6 +46,7 @@ class MainActivity : Activity() {
     private var trustedOrigin: String = ""
     private var aiRunner: SevenAiCommandRunner? = null
     private var aiRequestId: String? = null
+    private var pendingAiConsent: AlertDialog? = null
     private val sessionPattern = Regex("[A-Za-z0-9_-]{1,64}")
     private var showingConnectionError = false
     private var workbenchActive = false
@@ -413,6 +414,10 @@ class MainActivity : Activity() {
                 handleFileRequest(data)
                 return
             }
+            if (data.optString("type") == "ai-cancel") {
+                cancelAiCommand(data.optString("requestId"))
+                return
+            }
             if (data.optString("type") == "ai-propose") {
                 proposeAiCommand(data)
                 return
@@ -535,6 +540,20 @@ class MainActivity : Activity() {
      * Only the native host can approve executing an AI-proposed command.
      * Never auto-run anything received from a language model.
      */
+    private fun cancelAiCommand(requestId: String) {
+        if (requestId.isBlank() || requestId != aiRequestId) return
+        if (pendingAiConsent != null) {
+            pendingAiConsent?.dismiss()
+            pendingAiConsent = null
+            aiRequestId = null
+            sendAiResult(requestId, false, null, "", false, "Solicitação cancelada")
+        } else {
+            // Cancel runs through SevenAiCommandRunner, whose completion
+            // returns an inconclusive exit code rather than fabricated success.
+            aiRunner?.cancel()
+        }
+    }
+
     private fun proposeAiCommand(message: JSONObject) {
         val id = message.optString("requestId")
         val command = message.optString("command")
@@ -556,10 +575,12 @@ class MainActivity : Activity() {
                 "A execução terá as permissões do aplicativo Seven Code.")
             .setCancelable(false)
             .setNegativeButton("Negar") { _, _ ->
+                pendingAiConsent = null
                 aiRequestId = null
                 sendAiResult(id, false, null, "", false, "Negado pelo usuário")
             }
             .setPositiveButton("Executar") { _, _ ->
+                pendingAiConsent = null
                 val runner = SevenAiCommandRunner(this, onComplete = { result ->
                     aiRunner = null
                     aiRequestId = null
@@ -575,7 +596,10 @@ class MainActivity : Activity() {
                     sendAiResult(id, true, null, "", false,
                         error.message ?: "Falha no terminal")
                 }
-            }.show()
+            }.create().also { dialog ->
+                pendingAiConsent = dialog
+                dialog.show()
+            }
     }
 
     private fun sendAiResult(
@@ -620,6 +644,8 @@ class MainActivity : Activity() {
         workbenchActive = false
         closePopupWindows()
         closeWorkbenchTerminals()
+        pendingAiConsent?.dismiss()
+        pendingAiConsent = null
         aiRunner?.cancel()
         aiRunner = null
         localServer?.stop()
