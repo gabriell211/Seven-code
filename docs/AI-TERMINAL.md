@@ -68,3 +68,28 @@ Referências:
 - Android W^X: https://developer.android.com/about/versions/10/behavior-changes-10
 - Apple App Store 2.5.2: https://developer.apple.com/app-store/review/guidelines/
 - ios_system: https://github.com/holzschu/ios_system
+
+
+## Ferramenta original de agente do VS Code no Android (23/10/2026)
+
+A extensão web interna do Seven Code agora contribui `seven_code_run_android_shell`
+via as APIs **originais** `vscode.lm.registerTool` e
+`contributes.languageModelTools`. Isto **não substitui nem altera o Copilot**.
+Um agente compatível poderá solicitar a ferramenta e receber uma resposta
+`LanguageModelToolResult` depois da aprovação nativa.
+
+Fluxo:
+- Copilot/Agent solicita `androidTerminal` com `command` e opcionalmente `timeoutMs`.
+- A ponte do workbench passa `ai-propose` somente à WebView confiável.
+- Android apresenta **o comando completo** num diálogo e exige aprovação explícita.
+- Depois de aprovado, `SevenAiCommandRunner` executa no shell Android sem root,
+  devolvendo stdout limitado, status real ou código de saída inconclusivo.
+- Recusas, cancelamentos e timeouts não são anunciados como sucesso.
+- A versão web pode acessar a pasta autorizada SAF; o shell Android ainda
+  **não** monta essa pasta como caminho POSIX e não vê o filesystem remoto.
+
+**Limites de validação:** testes de contrato verificam registro do tool,
+transporte simulado, recusa, cancelamento, código de saída e saída. O CI Android
+verifica `SevenAiCommandRunner` em emulador JNI real. Isso **não comprova login
+Copilot real** nem o modelo selecionando e utilizando a ferramenta em conta
+autenticada. A qualificação de uma release completa exige esse E2E separado.

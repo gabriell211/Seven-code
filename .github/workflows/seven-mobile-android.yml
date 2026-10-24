@@ -8,6 +8,7 @@ on:
       - ".seven/tests/android-pty-process.test.mjs"
       - ".seven/tests/mobile-workbench.test.mjs"
       - ".seven/tests/android-phone-workspace.test.mjs"
+      - ".seven/tests/android-copilot-shell-tool.test.mjs"
       - "extensions/seven-code-mobile-terminal/**"
       - "src/vs/workbench/contrib/terminal/browser/sevenAndroidTerminalProcess.ts"
       - "src/vs/workbench/contrib/terminal/browser/terminalService.ts"
@@ -19,6 +20,7 @@ on:
       - ".seven/tests/android-pty-process.test.mjs"
       - ".seven/tests/mobile-workbench.test.mjs"
       - ".seven/tests/android-phone-workspace.test.mjs"
+      - ".seven/tests/android-copilot-shell-tool.test.mjs"
       - "extensions/seven-code-mobile-terminal/**"
       - "src/vs/workbench/contrib/terminal/browser/sevenAndroidTerminalProcess.ts"
       - "src/vs/workbench/contrib/terminal/browser/terminalService.ts"
@@ -51,6 +53,7 @@ jobs:
           node --experimental-strip-types --test mobile/remote/seven-workspace-client.test.mjs
           node --test .seven/tests/mobile-workbench.test.mjs
           node --test .seven/tests/android-phone-workspace.test.mjs
+          node --test .seven/tests/android-copilot-shell-tool.test.mjs
           node --test .seven/tests/android-pty-process.test.mjs
       - name: Construir interface xterm.js
         working-directory: mobile/terminal-ui
