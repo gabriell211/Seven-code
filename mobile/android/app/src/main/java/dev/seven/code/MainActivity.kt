@@ -35,6 +35,34 @@ internal fun safeExternalHttpsTarget(uri: Uri): Boolean =
         uri.userInfo == null && uri.fragment == null && uri.host!!.contains("..").not()
 
 /**
+ * Native PTY and document access must never be granted to arbitrary HTTPS.
+ * Only the exact APK-bundled editor document or the locally authenticated
+ * Code OSS server may receive the WebMessageListener bridge.
+ */
+internal fun trustedWorkbenchTarget(raw: String, verifiedLocalOrigin: String?): Pair<String, String>? {
+    val uri = Uri.parse(raw.trim())
+    if (uri.host.isNullOrBlank() || uri.userInfo != null || uri.fragment != null ||
+        uri.port > 65535 || uri.port == 0) return null
+    return when (uri.scheme) {
+        "http" -> {
+            if (uri.host != "127.0.0.1" || uri.port !in 1..65535) return null
+            val origin = "http://127.0.0.1:${uri.port}"
+            if (origin != verifiedLocalOrigin) return null
+            origin to uri.toString()
+        }
+        "https" -> {
+            if (!uri.host.equals("appassets.androidplatform.net", ignoreCase = true) ||
+                (uri.port != -1 && uri.port != 443) ||
+                uri.encodedPath != "/assets/seven-web/index.html" ||
+                uri.query != null) return null
+            "https://appassets.androidplatform.net" to
+                "https://appassets.androidplatform.net/assets/seven-web/index.html"
+        }
+        else -> null
+    }
+}
+
+/**
  * Host for the original Code OSS web workbench, served by the upstream-compatible VS Code web server over authenticated HTTPS.
  * The mobile-only addition is the native terminal bridge. No fake editor UI is used.
  */
@@ -114,24 +142,10 @@ class MainActivity : Activity() {
         setContentView(layout)
     }
 
-    private fun parseWorkbenchUrl(raw: String): Pair<String, String>? {
-        val uri = Uri.parse(raw.trim())
-        if (uri.host.isNullOrBlank() || uri.userInfo != null ||
-            uri.fragment != null || uri.port > 65535 || uri.port == 0) return null
-        // HTTP is trusted only for the per-app Node server on 127.0.0.1.
-        // Never expose the native terminal to arbitrary insecure websites.
-        if (uri.scheme == "http") {
-            val origin = localServer?.localOrigin ?: return null
-            val requested = "http://" + uri.host!!.lowercase() + ":" + uri.port
-            if (uri.host != "127.0.0.1" || requested != origin) return null
-            return origin to uri.toString()
-        }
-        if (uri.scheme != "https") return null
-        if (uri.host!!.contains("..")) return null
-        val host = uri.host!!.lowercase()
-        val port = if (uri.port == -1 || uri.port == 443) "" else ":" + uri.port
-        return "https://" + host + port to uri.toString()
-    }
+    // Keep the internal entrypoint used by existing Android instrumentation
+    // while centralizing the security checks in the origin validator above.
+    private fun parseWorkbenchUrl(raw: String): Pair<String, String>? =
+        trustedWorkbenchTarget(raw, localServer?.localOrigin)
 
     private fun openWorkbench(url: String) {
         val parsed = parseWorkbenchUrl(url) ?: return showLocalStartupFailure("URL local inválida.")

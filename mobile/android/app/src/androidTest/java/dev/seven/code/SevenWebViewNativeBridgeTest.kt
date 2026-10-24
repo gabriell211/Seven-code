@@ -6,6 +6,8 @@ import android.webkit.WebView
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.util.concurrent.CountDownLatch
@@ -20,6 +22,31 @@ import java.util.concurrent.atomic.AtomicReference
 @RunWith(AndroidJUnit4::class)
 class SevenWebViewNativeBridgeTest {
     private val origin = "https://appassets.androidplatform.net"
+    @Test
+    fun privilegedWorkbenchAcceptsOnlyBundledApkOrVerifiedLoopback() {
+        val offline = "https://appassets.androidplatform.net/assets/seven-web/index.html"
+        assertEquals("https://appassets.androidplatform.net",
+            trustedWorkbenchTarget(offline, null)?.first)
+        val origin = "http://127.0.0.1:43817"
+        assertEquals(origin, trustedWorkbenchTarget("$origin/?tkn=local", origin)?.first)
+        for (untrusted in listOf(
+            "https://example.com/editor",
+            "https://appassets.androidplatform.net.evil.example/assets/seven-web/index.html",
+            "https://appassets.androidplatform.net/other.html",
+            "https://appassets.androidplatform.net/assets/seven-web/index.html?redirect=https://evil.example",
+            "https://appassets.androidplatform.net/assets/seven-web/index.html#frag",
+            "https://user@appassets.androidplatform.net/assets/seven-web/index.html",
+            "http://127.0.0.1:43817/",
+            "http://127.0.0.1:43818/?tkn=local",
+            "http://localhost:43817/",
+            "file:///sdcard/index.html",
+            "javascript:alert(1)"
+        )) {
+            assertNull("Untrusted editor URL received native bridge: $untrusted",
+                trustedWorkbenchTarget(untrusted, if (untrusted.startsWith("http://127.0.0.1:43817/")) null else origin))
+        }
+    }
+
 
     private fun withBridgePage(
         session: String,
