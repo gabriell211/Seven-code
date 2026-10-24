@@ -5,6 +5,11 @@ on:
     workflows: ["Seven Code Android - compile Code OSS ARM64"]
     types: [completed]
   workflow_dispatch:
+  # One-time reproducible recovery of the already verified ARM64 source run,
+  # avoiding a second four-minute upstream compilation for an NDK script fix.
+  push:
+    branches: [main]
+    paths: [".github/workflows/seven-android-bionic-addons.yml"]
 
 permissions:
   actions: read
@@ -14,6 +19,7 @@ jobs:
   bionic-addons:
     if: >-
       github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'push' ||
       (github.event.workflow_run.conclusion == 'success' &&
        github.event.workflow_run.head_branch == 'main' &&
        github.event.workflow_run.head_repository.full_name == github.repository)
@@ -38,16 +44,16 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq binutils python3
       - name: Download ARM64 Code OSS and Bionic Node from the same signed-source build
-        if: github.event_name == 'workflow_run'
+        if: github.event_name == 'workflow_run' || github.event_name == 'push'
         uses: actions/download-artifact@v4
         with:
           pattern: SevenCode-*
           merge-multiple: false
-          run-id: ${{ github.event.workflow_run.id }}
+          run-id: ${{ github.event.workflow_run.id || 40052793301 }}
           github-token: ${{ github.token }}
           path: ${{ runner.temp }}/inputs
       - name: Find verified Android inputs
-        if: github.event_name == 'workflow_run'
+        if: github.event_name == 'workflow_run' || github.event_name == 'push'
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/staging"
@@ -60,13 +66,13 @@ jobs:
           echo "CODEOSS_PATH=$RUNNER_TEMP/staging/vscode-reh-web-linux-arm64" >> "$GITHUB_ENV"
           echo "BIONIC_PATH=$RUNNER_TEMP/staging/seven-bionic" >> "$GITHUB_ENV"
       - name: Compile native Android/Bionic PTY, watcher and SQLite
-        if: github.event_name == 'workflow_run'
+        if: github.event_name == 'workflow_run' || github.event_name == 'push'
         run: |
           set -euo pipefail
           export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/27.2.12479018"
           bash mobile/android/tools/build-bionic-addons.sh "$CODEOSS_PATH" "$BIONIC_PATH"
       - name: Audit remaining ABI conversions; never label GNU/Linux modules Android
-        if: github.event_name == 'workflow_run'
+        if: github.event_name == 'workflow_run' || github.event_name == 'push'
         run: |
           set -euo pipefail
           if python3 .seven/android/audit-codeoss-abi.py "$CODEOSS_PATH" --stage android-bionic \
@@ -78,19 +84,19 @@ jobs:
           fi
           cat "$RUNNER_TEMP/staging/ANDROID-BIONIC-ABI-REPORT.txt"
       - name: Upload ported Android native addons for next integration stage
-        if: github.event_name == 'workflow_run'
+        if: github.event_name == 'workflow_run' || github.event_name == 'push'
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/native-bionic"
-          printf '%s\n' '${{ github.event.workflow_run.id }}' > "$RUNNER_TEMP/native-bionic/UPSTREAM_RUN_ID.txt"
-          printf '%s\n' '${{ github.event.workflow_run.head_sha }}' > "$RUNNER_TEMP/native-bionic/SOURCE_SHA.txt"
+          printf '%s\n' '${{ github.event.workflow_run.id || 40052793301 }}' > "$RUNNER_TEMP/native-bionic/UPSTREAM_RUN_ID.txt"
+          printf '%s\n' '${{ github.event.workflow_run.head_sha || '24e5aee79cccebeb3659101bfb671607ebd427eb' }}' > "$RUNNER_TEMP/native-bionic/SOURCE_SHA.txt"
           cp "$CODEOSS_PATH/node_modules/node-pty/build/Release/pty.node" "$RUNNER_TEMP/native-bionic/pty.node"
           cp "$CODEOSS_PATH/node_modules/@parcel/watcher/build/Release/watcher.node" "$RUNNER_TEMP/native-bionic/watcher.node"
           cp "$CODEOSS_PATH/node_modules/@vscode/sqlite3/build/Release/vscode-sqlite3.node" "$RUNNER_TEMP/native-bionic/vscode-sqlite3.node"
           cp "$RUNNER_TEMP/staging/ANDROID-BIONIC-ABI-REPORT.txt" "$RUNNER_TEMP/native-bionic/ABI-REPORT.txt"
           sha256sum "$RUNNER_TEMP/native-bionic/"*.node
       - uses: actions/upload-artifact@v4
-        if: github.event_name == 'workflow_run'
+        if: github.event_name == 'workflow_run' || github.event_name == 'push'
         with:
           name: SevenCode-Android-Bionic-core-node-addons
           path: ${{ runner.temp }}/native-bionic
