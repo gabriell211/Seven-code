@@ -5,6 +5,8 @@ import android.webkit.WebView
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
+import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.util.concurrent.CountDownLatch
@@ -19,6 +21,16 @@ import java.util.concurrent.atomic.AtomicReference
 class SevenOfflineWebWorkbenchDeviceTest {
     @Test
     fun originalEditorActuallyStartsWithoutNodeOrRemoteUrl() {
+        // Thin host CI does not bundle the Web production assets. The offline
+        // workflow separately verifies this archive is actually in its APK
+        // before running this test, so a missing bundle cannot pass release.
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val bundled = try {
+            context.assets.open("seven-web/bundle.json").use { true }
+        } catch (_: java.io.IOException) {
+            false
+        }
+        assumeTrue("Only bundled Web-APK runs this end-to-end test", bundled)
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             var booted = false
             var lastPage = "No web page"
