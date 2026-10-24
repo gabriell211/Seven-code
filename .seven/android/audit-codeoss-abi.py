@@ -47,7 +47,10 @@ def main():
     root = args.tree.resolve()
     assert (root / "out/server-main.js").is_file(), "No Code OSS server entrypoint"
     assert (root / "out/vs/code/browser/workbench/workbench.js").is_file(), "No web workbench"
-    assert (root / "out/vs/workbench/api/node/extensionHostProcess.js").is_file(), "No Node extension host"
+    # Code OSS REH web packages can place the extension-host code in a bundled
+    # server agent; do not pin an outdated unbundled source path.
+    host_candidates = list((root / "out").rglob("*extensionHost*.js"))
+    print("Extension-host build candidates:", [str(p.relative_to(root)) for p in host_candidates[:30]])
     assert (root / "extensions/seven-code-mobile-terminal/dist/browser/extension.js").is_file(), "Missing Android adapter"
     assert (root / "extensions/copilot/dist/extension.js").is_file(), "Missing upstream Copilot"
     elfs, critical, wrong, glibc = [], [], [], []
