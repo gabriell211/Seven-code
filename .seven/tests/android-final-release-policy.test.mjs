@@ -29,6 +29,8 @@ test('release refuses split artifacts, stale SHAs, unverified binaries and debug
 });
 
 test('release cannot bypass on-device and authenticated Copilot acceptance', () => {
+  assert.ok(release.includes('tag="v${version_name}-android"'));
+  assert.match(release, /Final release must use a stable Android versionName/);
   assert.match(release, /SEVEN_RELEASE_PLATFORM: android/);
   assert.match(release, /require-release-checks\.mjs/);
   assert.match(acceptance, /Seven Code Copilot real OAuth and terminal Agent E2E/);
