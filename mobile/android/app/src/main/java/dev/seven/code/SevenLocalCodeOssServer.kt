@@ -67,8 +67,12 @@ internal class SevenLocalCodeOssServer(private val context: Context) {
         check(android.os.Build.SUPPORTED_ABIS.contains("arm64-v8a")) {
             "O runtime local requer Android ARM64; este dispositivo usa outra arquitetura."
         }
-        check(node.isFile && node.canExecute()) {
-            "Node.js Bionic ARM64 não está incluído no APK."
+        val gnuRuntime = SevenLocalGnuRuntime(context, root)
+        val useGnu = gnuRuntime.hasBundle()
+        if (!useGnu) {
+            check(node.isFile && node.canExecute()) {
+                "Node.js Bionic ARM64 não está incluído no APK."
+            }
         }
 
         val expected = context.assets.open(DIGEST).bufferedReader().use { it.readText().trim() }
@@ -125,7 +129,11 @@ internal class SevenLocalCodeOssServer(private val context: Context) {
         val token = randomToken.joinToString("") { "%02x".format(it) }
         val port = ServerSocket(0, 1, InetAddress.getByName("127.0.0.1")).use { it.localPort }
         val url = "http://127.0.0.1:$port/?tkn=$token"
-        val nativeLibraryDirectory = unpackTermuxNativeLibraries()
+        // The GNU experiment uses a separate original Linux/AArch64 Node
+        // process. It must NEVER dlopen glibc inside the Android/Bionic JVM.
+        // Without the explicit GNU assets, the normal Bionic path is unchanged.
+        val gnuLaunch = if (useGnu) gnuRuntime.prepare(serverDir) else null
+        val nativeLibraryDirectory = if (gnuLaunch == null) unpackTermuxNativeLibraries() else null
         val log = File(root, "server.log")
         val expectedCommit = JSONObject(File(serverDir, "product.json").readText()).getString("commit")
         check(expectedCommit.matches(Regex("[a-f0-9]{40}"))) {
@@ -134,8 +142,8 @@ internal class SevenLocalCodeOssServer(private val context: Context) {
 
         // The library is packaged as a directly executable ELF (not a dlopen-only
         // libnode). It must be built for Android's linker and ship its dependencies.
-        val command = listOf(
-            node.absolutePath, File(serverDir, "out/server-main.js").absolutePath,
+        val command = (gnuLaunch?.prefix ?: listOf(node.absolutePath)) + listOf(
+            File(serverDir, "out/server-main.js").absolutePath,
             "--host", "127.0.0.1", "--port", port.toString(),
             "--connection-token", token,
             "--server-data-dir", File(root, "data").absolutePath,
@@ -151,8 +159,13 @@ internal class SevenLocalCodeOssServer(private val context: Context) {
             put("TMPDIR", context.cacheDir.absolutePath)
             put("XDG_CONFIG_HOME", File(root, "config").absolutePath)
             put("XDG_CACHE_HOME", File(root, "cache").absolutePath)
-            put("LD_LIBRARY_PATH", nativeLibraryDirectory.absolutePath + ":" +
-                context.applicationInfo.nativeLibraryDir)
+            if (gnuLaunch != null) {
+                put("LD_LIBRARY_PATH", gnuLaunch.libraryPath)
+                put("COPILOT_CLI_PATH", gnuLaunch.cliWrapper.absolutePath)
+            } else {
+                put("LD_LIBRARY_PATH", nativeLibraryDirectory!!.absolutePath + ":" +
+                    context.applicationInfo.nativeLibraryDir)
+            }
         }
         val started = env.start()
         process = started
