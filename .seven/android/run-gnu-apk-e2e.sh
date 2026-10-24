@@ -62,6 +62,20 @@ diagnose_android_codeoss_failure() {
     adb shell run-as dev.seven.code cat files/seven-code-oss-local/server.log 2>/dev/null |
       sed -E 's/[[:xdigit:]]{64}/[redacted-local-token]/g' |
       tail -n 55 || true
+    echo "Android native crash buffer (local tokens redacted):"
+    adb logcat -d -b crash -t 350 2>/dev/null |
+      sed -E 's/[[:xdigit:]]{64}/[redacted-local-token]/g' |
+      tail -n 140 || true
+    echo "Android process and linker diagnostics (local tokens redacted):"
+    adb logcat -d -b main -t 1000 2>/dev/null |
+      grep -Ei 'Fatal signal|SIGSYS|seccomp|bad syscall|libseven-gnu|seven-node-gnu|linker.*(error|failed)' |
+      sed -E 's/[[:xdigit:]]{64}/[redacted-local-token]/g' |
+      tail -n 80 || true
+    echo "Android recorded process exits:"
+    adb shell dumpsys activity exit-info dev.seven.code 2>/dev/null |
+      sed -E 's/[[:xdigit:]]{64}/[redacted-local-token]/g' |
+      grep -Ei 'dev\.seven\.code|reason|status|signal|description' |
+      tail -n 70 || true
   fi
 }
 trap diagnose_android_codeoss_failure EXIT
