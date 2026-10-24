@@ -159,9 +159,9 @@ internal class SevenLocalGnuRuntime(
         // uses our verified, APK-bundled GNU dynamic loader.
         val nodeWrapper = File(root, "seven-node-gnu.sh")
         nodeWrapper.writeText(
-            "#!/system/bin/sh\\n" +
+            "#!/system/bin/sh\n" +
             "exec ${quote(loader.absolutePath)} --library-path ${quote(destination.absolutePath)} " +
-            "${quote(node.absolutePath)} \\"${'$'}@\\"\\n"
+            "${quote(node.absolutePath)} \"${'$'}@\"\n"
         )
         check(nodeWrapper.setExecutable(true, true)) {
             "O wrapper de processos Node GNU não pôde receber permissão de execução."
@@ -169,9 +169,9 @@ internal class SevenLocalGnuRuntime(
         val bootstrap = File(root, "seven-gnu-fork-bootstrap.cjs")
         bootstrap.writeText(
             "Object.defineProperty(process, 'execPath', {configurable: true, " +
-            "writable: true, value: " + JSONObject.quote(nodeWrapper.absolutePath) + "});\\n" +
+            "writable: true, value: " + JSONObject.quote(nodeWrapper.absolutePath) + "});\n" +
             "if (process.execPath !== " + JSONObject.quote(nodeWrapper.absolutePath) +
-            ") throw new Error('Seven GNU Node fork wrapper unavailable');\\n"
+            ") throw new Error('Seven GNU Node fork wrapper unavailable');\n"
         )
         return Launch(
             prefix = listOf(nodeWrapper.absolutePath),
