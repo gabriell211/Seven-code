@@ -1,6 +1,8 @@
 package dev.seven.code
 
 import android.os.SystemClock
+import android.graphics.Bitmap
+import java.io.File
 import android.webkit.WebView
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -48,7 +50,9 @@ class SevenOfflineWebWorkbenchDeviceTest {
                         """JSON.stringify({
                             origin: location.origin,
                             editor: !!document.querySelector('.monaco-workbench'),
-                            loading: !!document.getElementById('vscode-startup-fallback'),
+                            loading: !!document.getElementById('seven-code-loading'),
+                            viewport: { width: innerWidth, height: innerHeight, dpr: devicePixelRatio },
+                            workbench: (() => { const r = document.querySelector('.monaco-workbench')?.getBoundingClientRect(); return r ? {x:r.x, y:r.y, width:r.width, height:r.height} : null; })(),
                             title: document.title,
                             text: document.body?.innerText?.slice(0, 180)
                         })"""
@@ -72,6 +76,20 @@ class SevenOfflineWebWorkbenchDeviceTest {
                 "Real bundled Code OSS editor did not boot in Android WebView: $lastPage",
                 booted
             )
+            // Visual proof: actual compositor pixels captured while the real
+            // editor is on screen, not a mock HTML render or stock photo.
+            // The CI retrieves this file from the app sandbox with adb run-as.
+            SystemClock.sleep(1800)
+            val pixels = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
+            assertTrue("Android emulator did not provide a screen capture", pixels != null)
+            val screenshot = File(context.filesDir, "seven-code-portrait.png")
+            screenshot.outputStream().use { output ->
+                assertTrue("Could not encode emulator screen to PNG",
+                    pixels!!.compress(Bitmap.CompressFormat.PNG, 100, output))
+            }
+            pixels!!.recycle()
+            assertTrue("Captured screen is empty or truncated", screenshot.length() > 20_000L)
+
         }
     }
 }
