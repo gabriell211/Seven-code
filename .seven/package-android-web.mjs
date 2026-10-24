@@ -9,6 +9,7 @@ import { join, resolve } from 'node:path';
 
 const buildRoot = resolve(process.argv[2] ?? '../vscode-web');
 const destination = resolve(process.argv[3] ?? 'mobile/android/app/src/main/assets/seven-web');
+const copilotSource = resolve(process.argv[4] ?? 'extensions/copilot');
 const base = '/assets/seven-web';
 const jsEntrypoint = 'out/vs/workbench/workbench.web.main.internal.js';
 const cssEntrypoint = 'out/vs/workbench/workbench.web.main.internal.css';
@@ -46,6 +47,51 @@ for (const relative of ['package.json', 'dist/browser/extension.js']) {
     throw new Error('Android native terminal web extension missing: ' + relative);
   }
 }
+
+// This is Microsoft's/GitHub's real open-source Copilot WEB extension entry,
+// not the Node-only dist/extension.js or a fake chat widget. Only build output
+// produced from the current repository is accepted. No VSIX is downloaded.
+const copilotManifestFile = join(copilotSource, 'package.json');
+const copilotWorker = join(copilotSource, 'dist', 'web.js');
+const copilotLicense = join(copilotSource, 'LICENSE.txt');
+if (!existsSync(copilotManifestFile) || !existsSync(copilotWorker) || !existsSync(copilotLicense)) {
+  throw new Error('Copilot WEB host not compiled; run npm --prefix extensions/copilot run compile first');
+}
+if (statSync(copilotWorker).size < 100_000) {
+  throw new Error('Real Copilot Web worker is missing or unexpectedly small');
+}
+const copilotManifest = JSON.parse(readFileSync(copilotManifestFile, 'utf8'));
+if (copilotManifest.name !== 'copilot-chat' || copilotManifest.publisher !== 'GitHub' ||
+    !readFileSync(copilotLicense, 'utf8').includes('MIT License')) {
+  throw new Error('Unverified Copilot Chat source or license');
+}
+const copilotDest = join(destination, 'extensions', 'copilot-chat');
+mkdirSync(join(copilotDest, 'dist'), { recursive: true });
+cpSync(copilotWorker, join(copilotDest, 'dist', 'web.js'));
+cpSync(copilotLicense, join(copilotDest, 'LICENSE.txt'));
+for (const dir of ['assets', 'l10n']) {
+  const source = join(copilotSource, dir);
+  if (existsSync(source)) cpSync(source, join(copilotDest, dir), { recursive: true });
+}
+const copilotDist = join(copilotSource, 'dist');
+for (const filename of ['suggestionsPanelWebview.js']) {
+  if (existsSync(join(copilotDist, filename))) {
+    cpSync(join(copilotDist, filename), join(copilotDest, 'dist', filename));
+  }
+}
+for (const filename of ['package.nls.json']) {
+  if (existsSync(join(copilotSource, filename))) {
+    cpSync(join(copilotSource, filename), join(copilotDest, filename));
+  }
+}
+// The upstream manifest's main is a Node extension host. Android WebView
+// cannot run it. Preserve all contributions, commands and auth requirements,
+// but select the upstream Web extension worker for this APK's Web host.
+delete copilotManifest.main;
+copilotManifest.browser = './dist/web.js';
+copilotManifest.extensionKind = ['ui'];
+writeFileSync(join(copilotDest, 'package.json'), JSON.stringify(copilotManifest, null, 2) + '\\n');
+
 for (const notice of ['LICENSE.txt', 'ThirdPartyNotices.txt']) {
   if (!existsSync(resolve(notice))) throw new Error('Missing Code OSS notice: ' + notice);
   cpSync(resolve(notice), join(destination, notice));
@@ -62,6 +108,14 @@ const options = {
     scheme: 'https',
     authority: 'appassets.androidplatform.net',
     path: base + '/extensions/seven-code-mobile-terminal',
+  }, {
+    scheme: 'https',
+    authority: 'appassets.androidplatform.net',
+    path: base + '/extensions/copilot-chat',
+  }, {
+    scheme: 'https',
+    authority: 'appassets.androidplatform.net',
+    path: base + '/extensions/github-authentication',
   }],
   enableWorkspaceTrust: true,
   settingsSyncOptions: { enabled: false },
@@ -115,6 +169,9 @@ writeFileSync(join(destination, 'bundle.json'), JSON.stringify({
   mode: 'browser-only-offline',
   remoteNodeExtensions: false,
   nativeAndroidTerminalExtension: true,
+  copilotWebWorkerPackaged: true,
+  copilotNodeExtensionHostReady: false,
+  copilotAuthenticationE2EVerified: false,
   noNodeRequiredForUi: true,
 }, null, 2) + '\n');
 console.log('Bundled original standalone Code OSS Web Workbench into:', destination);
