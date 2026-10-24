@@ -3,6 +3,8 @@
     <application
         android:allowBackup="false"
         android:usesCleartextTraffic="false"
+        android:networkSecurityConfig="@xml/seven_network_security_config"
+        android:extractNativeLibs="true"
         android:label="Seven Code"
         android:theme="@android:style/Theme.Material.NoActionBar"
         android:icon="@mipmap/ic_launcher"
