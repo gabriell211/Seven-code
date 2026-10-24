@@ -27,6 +27,11 @@ test('full GNU single APK device test uses actual prebuilt 300 MB artifact and n
   assert.match(bash, /arm64-v8a/);
   assert.match(workflow, /verify-gnu-apk\.py/);
   assert.match(workflow, /android-emulator-runner@v2/);
+  assert.match(workflow, /native-arm64-codeoss:/);
+  assert.match(workflow, /runs-on: macos-15/);
+  assert.match(workflow, /arch: arm64-v8a/);
+  assert.match(workflow, /Prove this is a genuine Apple Silicon ARM64 runner/);
+
   assert.match(bash, /SevenStandaloneGnuDeviceTest/);
 });
 
