@@ -35,8 +35,15 @@ provedor SAF permitam.
 - Leituras e gravações são transferidas em blocos de 32 KiB.
 - Tamanho máximo por arquivo nesta versão: **10 MiB**.
 - Renomear dentro da mesma pasta é suportado; mover entre pastas ainda não.
-- A pasta SAF não oferece transações universais entre provedores: gravações no
-  documento de destino podem falhar durante a cópia. Mantenha backups dos projetos.
+- A pasta SAF não oferece transações universais entre provedores. Antes de
+  sobrescrever um arquivo, o Android guarda uma cópia de recuperação no
+  sandbox do aplicativo. Se a escrita falhar, tenta restaurar o original;
+  caso a restauração também falhe, mantém o backup em
+  `files/seven-file-recovery/` e informa o erro. Faça backups externos.
+- O editor rejeita gravações obsoletas quando um outro aplicativo altera
+  tamanho ou data do mesmo documento entre o início e a confirmação da
+  escrita. Provedores que não fornecem data de modificação confiável podem
+  não detectar alterações de mesmo tamanho.
 - A ponte não incorpora uma cópia completa do Code OSS no APK, não substitui um
   ambiente de execução Node compatível para extensões e não comprova Copilot
   Agent operando sobre arquivos locais. Essas validações continuam pendentes.
@@ -66,3 +73,8 @@ Esses testes não substituem homologação em celulares físicos de
 fabricantes diferentes ou com diretórios de grande porte. Se a interface
 de autorização Android mudar, o teste deve falhar e ser ajustado antes
 da publicação; o CI não pode contorná-lo atribuindo sucesso fictício.
+
+
+O teste instrumentado também altera um documento pelo `ContentResolver`
+fora da ponte e exige que uma tentativa de salvar uma versão antiga falhe
+sem apagar a alteração externa.
