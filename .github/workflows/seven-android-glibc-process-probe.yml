@@ -180,12 +180,12 @@ jobs:
           bootstrap="$RUNNER_TEMP/gnu-runtime/seven-node-fork-test.cjs"
           child="$RUNNER_TEMP/gnu-runtime/seven-node-child-test.cjs"
           # Linux-only equivalent of Android's private /system/bin/sh wrapper.
-          printf '#!/bin/sh\\nexec "%s" --library-path "%s" "%s" "$@"\\n' \
+          printf '#!/bin/sh\nexec "%s" --library-path "%s" "%s" "$@"\n' \
             "$loader" "$libs" "$node" > "$wrapper"
           chmod 700 "$wrapper"
-          printf "Object.defineProperty(process, 'execPath', { configurable: true, writable: true, value: '%s' });\\n" \
+          printf "Object.defineProperty(process, 'execPath', { configurable: true, writable: true, value: '%s' });\n" \
             "$wrapper" > "$bootstrap"
-          printf "process.send({ marker: 'ORIGINAL_CODEOSS_GNU_CHILD_OK', executable: process.execPath });\\n" > "$child"
+          printf "process.send({ marker: 'ORIGINAL_CODEOSS_GNU_CHILD_OK', executable: process.execPath });\n" > "$child"
           export NODE_OPTIONS="--require=$bootstrap"
           "$wrapper" -e '
             const cp = require("node:child_process");
