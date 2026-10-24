@@ -3,13 +3,11 @@ package dev.seven.code
 import android.app.Activity
 import android.content.Intent
 import android.net.Uri
-import android.provider.DocumentsContract
 import android.util.Base64
 import androidx.documentfile.provider.DocumentFile
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
-import java.io.FileOutputStream
 import java.io.RandomAccessFile
 import java.util.concurrent.ConcurrentHashMap
 
@@ -32,6 +30,11 @@ internal class SevenMobileDocuments(private val activity: Activity) {
         private const val MAX_READ_CHUNK = 32 * 1024
         private const val MAX_FILE_SIZE = 10 * 1024 * 1024L
         private const val MAX_ENTRIES = 2048
+        // Reject cloud document providers: project data should live on the phone.
+        private val LOCAL_AUTHORITIES = setOf(
+            "com.android.externalstorage.documents",
+            "com.android.providers.downloads.documents"
+        )
     }
 
     private data class PendingWrite(
@@ -46,6 +49,7 @@ internal class SevenMobileDocuments(private val activity: Activity) {
         val text = activity.getSharedPreferences(PREFS, 0).getString(KEY_TREE, null)
             ?: error("Escolha uma pasta do celular antes de acessar os arquivos.")
         val uri = Uri.parse(text)
+        check(uri.authority in LOCAL_AUTHORITIES) { "A pasta deve estar no armazenamento local." }
         val permitted = activity.contentResolver.persistedUriPermissions.any {
             it.uri == uri && it.isReadPermission && it.isWritePermission
         }
@@ -110,6 +114,9 @@ internal class SevenMobileDocuments(private val activity: Activity) {
         }
         return try {
             val uri = data.data!!
+            check(uri.authority in LOCAL_AUTHORITIES) {
+                "Escolha uma pasta do armazenamento local do Android, não na nuvem."
+            }
             val mode = Intent.FLAG_GRANT_READ_URI_PERMISSION or
                 Intent.FLAG_GRANT_WRITE_URI_PERMISSION
             activity.contentResolver.takePersistableUriPermission(uri, mode)
@@ -141,7 +148,7 @@ internal class SevenMobileDocuments(private val activity: Activity) {
                     val entries = children.listFiles()
                     check(entries.size <= MAX_ENTRIES) { "Pasta com arquivos demais." }
                     JSONArray().apply {
-                        children.listFiles().forEach { doc ->
+                        entries.forEach { doc ->
                             put(JSONObject().put("name", doc.name)
                                 .put("type", if (doc.isDirectory) "directory" else "file"))
                         }

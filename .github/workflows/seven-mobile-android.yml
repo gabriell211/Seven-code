@@ -7,6 +7,8 @@ on:
       - "mobile/**"
       - ".seven/tests/android-pty-process.test.mjs"
       - ".seven/tests/mobile-workbench.test.mjs"
+      - ".seven/tests/android-phone-workspace.test.mjs"
+      - "extensions/seven-code-mobile-terminal/**"
       - "src/vs/workbench/contrib/terminal/browser/sevenAndroidTerminalProcess.ts"
       - "src/vs/workbench/contrib/terminal/browser/terminalService.ts"
       - "src/vs/workbench/browser/sevenMobileTerminalBridge.ts"
@@ -16,6 +18,8 @@ on:
       - "mobile/**"
       - ".seven/tests/android-pty-process.test.mjs"
       - ".seven/tests/mobile-workbench.test.mjs"
+      - ".seven/tests/android-phone-workspace.test.mjs"
+      - "extensions/seven-code-mobile-terminal/**"
       - "src/vs/workbench/contrib/terminal/browser/sevenAndroidTerminalProcess.ts"
       - "src/vs/workbench/contrib/terminal/browser/terminalService.ts"
       - "src/vs/workbench/browser/sevenMobileTerminalBridge.ts"
@@ -46,6 +50,7 @@ jobs:
         run: |
           node --experimental-strip-types --test mobile/remote/seven-workspace-client.test.mjs
           node --test .seven/tests/mobile-workbench.test.mjs
+          node --test .seven/tests/android-phone-workspace.test.mjs
           node --test .seven/tests/android-pty-process.test.mjs
       - name: Construir interface xterm.js
         working-directory: mobile/terminal-ui
