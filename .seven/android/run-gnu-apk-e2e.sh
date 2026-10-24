@@ -56,6 +56,9 @@ diagnose_android_codeoss_failure() {
   local status=$?
   if [[ "$status" -ne 0 ]]; then
     echo "::error::Real Code OSS Android acceptance failed (exit $status)."
+    echo "Verified local Code OSS last startup phase:"
+    adb shell run-as dev.seven.code cat files/seven-code-oss-local/startup-phase.txt 2>/dev/null || true
+    echo "Original Code OSS server log (local auth token redacted):"
     adb shell run-as dev.seven.code cat files/seven-code-oss-local/server.log 2>/dev/null |
       sed -E 's/[[:xdigit:]]{64}/[redacted-local-token]/g' |
       tail -n 55 || true

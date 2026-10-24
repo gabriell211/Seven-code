@@ -81,7 +81,11 @@ class SevenStandaloneGnuDeviceTest {
                 if (lastError != null) break
                 Thread.sleep(500)
             }
-            assertTrue("Real GNU Code OSS did not load on Android. " +
+            val phaseFile = java.io.File(context.filesDir,
+                "seven-code-oss-local/startup-phase.txt")
+            val phase = if (phaseFile.isFile) phaseFile.readText().take(160)
+                else "startup-phase-file-missing"
+            assertTrue("Real GNU Code OSS did not load on Android (phase: $phase). " +
                 (lastError ?: "No local workbench WebView appeared within five minutes."),
                 localUrl != null)
             val pageUri = Uri.parse(localUrl)
