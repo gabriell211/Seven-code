@@ -75,6 +75,10 @@ jobs:
         if: github.event_name == 'workflow_run' || github.event_name == 'push'
         run: |
           set -euo pipefail
+          # This GNU/Linux build artifact includes a Linux Node binary.
+          # The APK uses verified libnode.so instead, so exclude that binary
+          # before auditing remaining active extension-native dependencies.
+          rm -f "$CODEOSS_PATH/node"
           if python3 .seven/android/audit-codeoss-abi.py "$CODEOSS_PATH" --stage android-bionic \
             > "$RUNNER_TEMP/staging/ANDROID-BIONIC-ABI-REPORT.txt" 2>&1; then
             printf '\nABI_STATUS=READY\n' | tee -a "$RUNNER_TEMP/staging/ANDROID-BIONIC-ABI-REPORT.txt"
@@ -93,6 +97,8 @@ jobs:
           cp "$CODEOSS_PATH/node_modules/node-pty/build/Release/pty.node" "$RUNNER_TEMP/native-bionic/pty.node"
           cp "$CODEOSS_PATH/node_modules/@parcel/watcher/build/Release/watcher.node" "$RUNNER_TEMP/native-bionic/watcher.node"
           cp "$CODEOSS_PATH/node_modules/@vscode/sqlite3/build/Release/vscode-sqlite3.node" "$RUNNER_TEMP/native-bionic/vscode-sqlite3.node"
+          cp "$CODEOSS_PATH/node_modules/@vscode/spdlog/build/Release/spdlog.node" "$RUNNER_TEMP/native-bionic/spdlog.node"
+          cp "$CODEOSS_PATH/node_modules/@vscode/native-watchdog/build/Release/watchdog.node" "$RUNNER_TEMP/native-bionic/watchdog.node"
           cp "$RUNNER_TEMP/staging/ANDROID-BIONIC-ABI-REPORT.txt" "$RUNNER_TEMP/native-bionic/ABI-REPORT.txt"
           sha256sum "$RUNNER_TEMP/native-bionic/"*.node
       - uses: actions/upload-artifact@v4
