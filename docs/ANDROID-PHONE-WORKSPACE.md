@@ -51,3 +51,18 @@ renomear, excluir e recusa de gravar arquivo ausente quando `create=false`.
 
 Os testes simulam a resposta Android e **não substituem** a homologação SAF
 em um aparelho real com diferentes provedores, reinícios e edições simultâneas.
+
+
+## Homologação SAF com Android real (emulador)
+
+O CI Android agora executa `SevenPhoneFilesDeviceTest` usando o seletor
+**DocumentsUI real**, a pasta `Documents/SevenCodeCi` no armazenamento do
+emulador e o provedor nativo `com.android.externalstorage.documents`.
+O teste verifica autorização persistente, gravação e leitura Unicode,
+listagem, renomeação, exclusão e restauro após recriar a Activity.
+É um teste Android instrumentado, não uma simulação do provider JavaScript.
+
+Esses testes não substituem homologação em celulares físicos de
+fabricantes diferentes ou com diretórios de grande porte. Se a interface
+de autorização Android mudar, o teste deve falhar e ser ajustado antes
+da publicação; o CI não pode contorná-lo atribuindo sucesso fictício.

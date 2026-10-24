@@ -71,10 +71,10 @@ class SevenPhoneFilesDeviceTest {
             allow!!.click()
 
             var persisted: String? = null
-            repeat(60) {
+            for (attempt in 0 until 60) {
                 persisted = context.getSharedPreferences("seven-mobile-documents", 0)
                     .getString("tree-uri", null)
-                if (persisted?.contains("SevenCodeCi") == true) return@repeat
+                if (persisted?.contains("SevenCodeCi") == true) break
                 Thread.sleep(200)
             }
             assertTrue("Activity did not persist the selected local phone folder: $persisted",

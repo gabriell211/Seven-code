@@ -90,7 +90,9 @@ jobs:
           arch: x86_64
           target: google_apis
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
-          script: gradle -p mobile/android :app:connectedDebugAndroidTest --no-daemon --stacktrace
+          script: |
+            adb shell mkdir -p /sdcard/Documents/SevenCodeCi
+            gradle -p mobile/android :app:connectedDebugAndroidTest --no-daemon --stacktrace
       - uses: actions/upload-artifact@v4
         with:
           name: SevenCode-android-debug-apk
