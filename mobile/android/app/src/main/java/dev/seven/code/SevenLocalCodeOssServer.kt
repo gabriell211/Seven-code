@@ -49,9 +49,26 @@ internal class SevenLocalCodeOssServer(private val context: Context) {
      * The external emulator CI reads this file after an E2E failure. A green
      * APK build does not constitute successful server startup.
      */
+    @Volatile private var lastBootPhase: String = "not-started"
+
     private fun bootPhase(value: String) {
+        lastBootPhase = value
         if (!root.isDirectory) root.mkdirs()
         File(root, "startup-phase.txt").writeText(value)
+    }
+
+    /**
+     * Do not overwrite the last useful bootstrap stage with a bare exception
+     * type. CI needs the actual phase AND a sanitized failure reason to debug
+     * signed original Code OSS startup without exposing loopback auth tokens.
+     */
+    private fun bootError(failure: Throwable) {
+        val reason = (failure.message ?: "<no-message>")
+            .replace(Regex("[a-fA-F0-9]{64}"), "[redacted-local-token]")
+            .replace(Regex("(?i)(?:tkn|token|password)=[^&\\s]+"), "secret=[redacted]")
+            .replace(Regex("[\\r\\n\\t]+"), " ")
+            .take(260)
+        bootPhase("failed-at:$lastBootPhase;type:${failure.javaClass.simpleName};reason:$reason")
     }
 
     /** Presence is not proof of a runnable server. Integrity/startup checks follow. */
@@ -66,9 +83,7 @@ internal class SevenLocalCodeOssServer(private val context: Context) {
         stopped = false
         thread(name = "seven-code-oss-bootstrap", isDaemon = true) {
             val result = runCatching { startVerifiedLocalServer() }
-            result.exceptionOrNull()?.let {
-                bootPhase("failed:" + it.javaClass.simpleName)
-            }
+            result.exceptionOrNull()?.let { bootError(it) }
             handler.post {
                 if (!stopped) onComplete(result)
             }
