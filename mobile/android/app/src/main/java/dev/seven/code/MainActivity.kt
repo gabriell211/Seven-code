@@ -7,8 +7,10 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Bundle
+import android.os.Message
 import android.util.Base64
 import android.view.ViewGroup
+import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
@@ -26,6 +28,11 @@ import org.json.JSONObject
 import java.io.IOException
 import java.io.ByteArrayInputStream
 
+/** External browser receives only top-level HTTPS URLs, never scripts or file URLs. */
+internal fun safeExternalHttpsTarget(uri: Uri): Boolean =
+    uri.scheme == "https" && !uri.host.isNullOrBlank() &&
+        uri.userInfo == null && uri.fragment == null && uri.host!!.contains("..").not()
+
 /**
  * Host for the original Code OSS web workbench, served by the upstream-compatible VS Code web server over authenticated HTTPS.
  * The mobile-only addition is the native terminal bridge. No fake editor UI is used.
@@ -41,6 +48,7 @@ class MainActivity : Activity() {
     private val sessionPattern = Regex("[A-Za-z0-9_-]{1,64}")
     private var showingConnectionError = false
     private var workbenchActive = false
+    private val popupWindows = mutableSetOf<WebView>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -67,6 +75,7 @@ class MainActivity : Activity() {
         workbenchActive = false
         trustedOrigin = ""
         closeWorkbenchTerminals()
+        closePopupWindows()
         if (::webView.isInitialized) {
             webView.stopLoading()
             webView.loadUrl("about:blank")
@@ -117,6 +126,7 @@ class MainActivity : Activity() {
         // Stop authorization for the old web document before replacing its WebView.
         workbenchActive = false
         closeWorkbenchTerminals()
+        closePopupWindows()
         if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
             setContentView(TextView(this).apply {
                 text = "Atualize o Android System WebView para usar o Seven Code."
@@ -133,7 +143,7 @@ class MainActivity : Activity() {
             allowFileAccess = false
             allowContentAccess = false
             javaScriptCanOpenWindowsAutomatically = false
-            setSupportMultipleWindows(false)
+            setSupportMultipleWindows(true)
             mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
             safeBrowsingEnabled = true
         }
@@ -152,14 +162,8 @@ class MainActivity : Activity() {
                 if (requestedOrigin == trustedOrigin && uri.userInfo == null) return false
                 // OAuth providers prohibit login in embedded webviews. Only
                 // deliberate HTTPS navigations can leave this trusted origin.
-                if (request.hasGesture() && uri.scheme == "https" &&
-                    !uri.host.isNullOrBlank() && uri.userInfo == null) {
-                    val intent = Intent(Intent.ACTION_VIEW, uri).addCategory(Intent.CATEGORY_BROWSABLE)
-                    try {
-                        startActivity(intent)
-                    } catch (_: ActivityNotFoundException) {
-                        promptServerFailure("Não há navegador disponível para abrir o login externo.")
-                    }
+                if (request.hasGesture() && safeExternalHttpsTarget(uri)) {
+                    openInSystemBrowser(uri)
                 }
                 return true
             }
@@ -190,6 +194,57 @@ class MainActivity : Activity() {
                 return null
             }
         }
+        webView.webChromeClient = object : WebChromeClient() {
+            override fun onCreateWindow(
+                view: WebView, isDialog: Boolean,
+                isUserGesture: Boolean, resultMsg: Message
+            ): Boolean {
+                // Code OSS env.openExternal frequently uses window.open, not
+                // a main-frame navigation. Never load an OAuth popup inside
+                // the privileged workbench WebView.
+                if (!workbenchActive || view !== webView || !isUserGesture ||
+                    isFinishing || isDestroyed) return false
+                val popup = WebView(this@MainActivity)
+                popup.settings.apply {
+                    javaScriptEnabled = false
+                    allowFileAccess = false
+                    allowContentAccess = false
+                    mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+                }
+                popup.webViewClient = object : WebViewClient() {
+                    override fun shouldOverrideUrlLoading(
+                        child: WebView, request: WebResourceRequest
+                    ): Boolean {
+                        if (request.isForMainFrame && safeExternalHttpsTarget(request.url)) {
+                            openInSystemBrowser(request.url)
+                        }
+                        destroyPopup(popup)
+                        return true
+                    }
+                    override fun onPageStarted(child: WebView, url: String, favicon: Bitmap?) {
+                        val uri = Uri.parse(url)
+                        if (safeExternalHttpsTarget(uri)) {
+                            openInSystemBrowser(uri)
+                            destroyPopup(popup)
+                        }
+                    }
+                }
+                popupWindows.add(popup)
+                // Android WebView requires a transported child window for
+                // target=_blank. Popup never receives the native terminal API.
+                (view.parent as? ViewGroup)?.addView(
+                    popup, ViewGroup.LayoutParams(1, 1)
+                )
+                popup.visibility = android.view.View.INVISIBLE
+                (resultMsg.obj as WebView.WebViewTransport).webView = popup
+                resultMsg.sendToTarget()
+                return true
+            }
+
+            override fun onCloseWindow(window: WebView) {
+                destroyPopup(window)
+            }
+        }
         WebViewCompat.addWebMessageListener(
             webView, "SevenTerminalNative", setOf(trustedOrigin)
         ) { senderView, message, sourceOrigin, isMainFrame, _ ->
@@ -207,6 +262,29 @@ class MainActivity : Activity() {
         showingConnectionError = false
         workbenchActive = true
         webView.loadUrl(parsed.second)
+    }
+
+    private fun openInSystemBrowser(uri: Uri) {
+        if (!safeExternalHttpsTarget(uri)) return
+        try {
+            startActivity(
+                Intent(Intent.ACTION_VIEW, uri)
+                    .addCategory(Intent.CATEGORY_BROWSABLE)
+            )
+        } catch (_: ActivityNotFoundException) {
+            promptServerFailure("Nenhum navegador disponível para concluir a autenticação.")
+        }
+    }
+
+    private fun destroyPopup(popup: WebView) {
+        if (!popupWindows.remove(popup)) return
+        popup.stopLoading()
+        (popup.parent as? ViewGroup)?.removeView(popup)
+        popup.destroy()
+    }
+
+    private fun closePopupWindows() {
+        popupWindows.toList().forEach { destroyPopup(it) }
     }
 
     private fun promptServerFailure(reason: String) {
@@ -413,6 +491,7 @@ class MainActivity : Activity() {
 
     override fun onDestroy() {
         workbenchActive = false
+        closePopupWindows()
         closeWorkbenchTerminals()
         aiRunner?.cancel()
         aiRunner = null
