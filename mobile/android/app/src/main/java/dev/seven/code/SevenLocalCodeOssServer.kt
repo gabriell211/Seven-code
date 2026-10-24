@@ -162,6 +162,9 @@ internal class SevenLocalCodeOssServer(private val context: Context) {
             if (gnuLaunch != null) {
                 put("LD_LIBRARY_PATH", gnuLaunch.libraryPath)
                 put("COPILOT_CLI_PATH", gnuLaunch.cliWrapper.absolutePath)
+                // Inherit the same loader wrapper in every Code OSS Node
+                // extension-host child spawned by child_process.fork().
+                put("NODE_OPTIONS", "--require=${gnuLaunch.bootstrap.absolutePath}")
             } else {
                 put("LD_LIBRARY_PATH", nativeLibraryDirectory!!.absolutePath + ":" +
                     context.applicationInfo.nativeLibraryDir)
