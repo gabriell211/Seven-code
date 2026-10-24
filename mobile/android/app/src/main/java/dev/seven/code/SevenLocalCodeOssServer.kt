@@ -44,6 +44,16 @@ internal class SevenLocalCodeOssServer(private val context: Context) {
     @Volatile var localOrigin: String? = null
         private set
 
+    /**
+     * Persistent, token-free startup breadcrumbs for ACTUAL on-device debug.
+     * The external emulator CI reads this file after an E2E failure. A green
+     * APK build does not constitute successful server startup.
+     */
+    private fun bootPhase(value: String) {
+        if (!root.isDirectory) root.mkdirs()
+        File(root, "startup-phase.txt").writeText(value)
+    }
+
     /** Presence is not proof of a runnable server. Integrity/startup checks follow. */
     fun hasBundle(): Boolean = try {
         context.assets.open(ARCHIVE).use { }
@@ -56,6 +66,9 @@ internal class SevenLocalCodeOssServer(private val context: Context) {
         stopped = false
         thread(name = "seven-code-oss-bootstrap", isDaemon = true) {
             val result = runCatching { startVerifiedLocalServer() }
+            result.exceptionOrNull()?.let {
+                bootPhase("failed:" + it.javaClass.simpleName)
+            }
             handler.post {
                 if (!stopped) onComplete(result)
             }
@@ -63,6 +76,7 @@ internal class SevenLocalCodeOssServer(private val context: Context) {
     }
 
     private fun startVerifiedLocalServer(): String {
+        bootPhase("verify-bundle")
         check(hasBundle()) { "Pacote Code OSS não está incluído neste APK." }
         check(android.os.Build.SUPPORTED_ABIS.contains("arm64-v8a")) {
             "O runtime local requer Android ARM64; este dispositivo usa outra arquitetura."
@@ -91,6 +105,7 @@ internal class SevenLocalCodeOssServer(private val context: Context) {
                 var archiveSize = 0L
                 // Materialize the archive and hash the actual installed bytes before extraction.
                 val zipFile = File(root, "incoming.zip")
+                bootPhase("copy-codeoss-archive")
                 context.assets.open(ARCHIVE).use { input ->
                     zipFile.outputStream().use { output ->
                         val buffer = ByteArray(64 * 1024)
@@ -109,6 +124,7 @@ internal class SevenLocalCodeOssServer(private val context: Context) {
                 check(StatFs(context.filesDir.absolutePath).availableBytes > 1_000_000_000L) {
                     "Espaço insuficiente para instalar o Code OSS local."
                 }
+                bootPhase("extract-original-codeoss")
                 FileInputStream(zipFile).use { extractVerifiedZip(it, staging) }
                 check(File(staging, "out/server-main.js").isFile) {
                     "Pacote não contém o servidor original do Code OSS."
@@ -132,7 +148,9 @@ internal class SevenLocalCodeOssServer(private val context: Context) {
         // The GNU experiment uses a separate original Linux/AArch64 Node
         // process. It must NEVER dlopen glibc inside the Android/Bionic JVM.
         // Without the explicit GNU assets, the normal Bionic path is unchanged.
+        bootPhase(if (useGnu) "verify-and-extract-gnu-runtime" else "verify-bionic-runtime")
         val gnuLaunch = if (useGnu) gnuRuntime.prepare(serverDir) else null
+        bootPhase("native-runtime-verified")
         val nativeLibraryDirectory = if (gnuLaunch == null) unpackTermuxNativeLibraries() else null
         val log = File(root, "server.log")
         val expectedCommit = JSONObject(File(serverDir, "product.json").readText()).getString("commit")
@@ -170,8 +188,10 @@ internal class SevenLocalCodeOssServer(private val context: Context) {
                     context.applicationInfo.nativeLibraryDir)
             }
         }
+        bootPhase("start-original-codeoss-process")
         val started = env.start()
         process = started
+        bootPhase("await-real-server-auth-and-web-workbench")
         val deadline = System.nanoTime() + 90_000_000_000L
         while (!stopped && System.nanoTime() < deadline && started.isAlive) {
             // TCP alone is NOT proof: another process may bind the ephemeral
@@ -179,6 +199,7 @@ internal class SevenLocalCodeOssServer(private val context: Context) {
             if (hasServerReadinessBanner(log, port) &&
                 verifyAuthenticatedWorkbench(port, token, expectedCommit)) {
                 localOrigin = "http://127.0.0.1:$port"
+                bootPhase("authenticated-workbench-ready")
                 return url
             }
             Thread.sleep(200)
