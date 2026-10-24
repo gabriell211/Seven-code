@@ -1,6 +1,14 @@
 name: Seven Code Android - experimental isolated GNU ARM64 single APK
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - "mobile/android/app/src/main/**"
+      - "mobile/android/terminal/**"
+      - "mobile/android/app/build.gradle.kts"
+      - ".seven/package-android-gnu-experiment.mjs"
+      - ".github/workflows/seven-android-gnu-apk-experiment.yml"
   workflow_run:
     workflows: ["Seven Code Android - research isolated GNU ARM64 Copilot process"]
     types: [completed]
@@ -12,9 +20,13 @@ permissions:
 jobs:
   gnu-android-experiment:
     if: >-
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.head_branch == 'main' &&
-      github.event.workflow_run.head_repository.full_name == github.repository
+      github.event_name == 'push' ||
+      (
+        github.event_name == 'workflow_run' &&
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.head_branch == 'main' &&
+        github.event.workflow_run.head_repository.full_name == github.repository
+      )
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     name: Assemble ONE local Code OSS + Copilot GNU Android experiment (NOT release)
@@ -50,11 +62,47 @@ jobs:
           sdkmanager "platforms;android-36" "build-tools;36.0.0" "cmake;3.22.1" "ndk;27.2.12479018"
           sudo apt-get update -qq
           sudo apt-get install -y -qq binutils zip unzip
+      - name: Choose only the original GNU ARM64 source matching current Code OSS
+        id: gnu_source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == workflow_run ]]; then
+            run_id="${{ github.event.workflow_run.id }}"
+            source_sha="${{ github.event.workflow_run.head_sha }}"
+          else
+            run_id=""
+            source_sha=""
+            while read -r candidate_id candidate_sha; do
+              [[ "$candidate_sha" =~ ^[0-9a-f]{40}$ ]] || continue
+              git fetch --no-tags --depth=1 origin "$candidate_sha"
+              if git diff --quiet "$candidate_sha" HEAD -- \
+                src extensions remote build product.json \
+                package.json package-lock.json .nvmrc \
+                .seven/android/build-isolated-gnu-runtime.py \
+                .github/workflows/seven-android-codeoss-arm64.yml; then
+                run_id="$candidate_id"
+                source_sha="$candidate_sha"
+                break
+              fi
+            done < <(
+              gh api "repos/$GITHUB_REPOSITORY/actions/workflows/seven-android-glibc-process-probe.yml/runs?branch=main&status=success&per_page=25" \
+                --jq '.workflow_runs[] | "\(.id) \(.head_sha)"'
+            )
+            test -n "$run_id" || {
+              echo "::error::No passing ORIGINAL GNU ARM64 research build with identical Code OSS source."
+              exit 1
+            }
+          fi
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+          echo "source_sha=$source_sha" >> "$GITHUB_OUTPUT"
+          echo "Pinned original GNU ARM64 research to run $run_id commit $source_sha"
       - name: Download precisely qualified GNU ARM64 research closure
         uses: actions/download-artifact@v4
         with:
           name: SevenCode-GNU-arm64-separate-process-research-only
-          run-id: ${{ github.event.workflow_run.id }}
+          run-id: ${{ steps.gnu_source.outputs.run_id }}
           github-token: ${{ github.token }}
           path: ${{ runner.temp }}/gnu-input
       - name: Validate original GNU ELF source and exact compiled Code OSS run
