@@ -21,7 +21,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: main
+      - name: Reject changes to compiled Code OSS sources since the verified GNU run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          main_sha=$(gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq '.commit.sha')
+          test "$main_sha" = "$(git rev-parse HEAD)" || {
+            echo "::error::Experimental APK checkout is stale; retry from current main."
+            exit 1
+          }
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
@@ -60,11 +70,15 @@ jobs:
           test -s "$RUNNER_TEMP/gnu-runtime/ld-linux-aarch64.so.1"
           test -s "$RUNNER_TEMP/gnu-runtime/node"
           git fetch --no-tags --depth=1 origin "$source_sha"
+          # The app Kotlin code, Gradle packaging, research tooling and
+          # workflow may evolve independently of the compiled Code OSS
+          # server. Only reuse the GNU ARM64 artifact if EVERY compiler input
+          # remains byte-identical; always package the newest Android app.
           if ! git diff --quiet "$source_sha" HEAD -- \
             .github/workflows/seven-android-codeoss-arm64.yml \
-            src extensions remote build mobile/android product.json \
+            src extensions remote build product.json \
             package.json package-lock.json .nvmrc; then
-            echo "::error::GNU runtime is not from the current Android/editor source. Rebuild the complete Code OSS runtime."
+            echo "::error::Original Code OSS compiler inputs changed. Rebuild ARM64 before packaging."
             exit 1
           fi
           echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
