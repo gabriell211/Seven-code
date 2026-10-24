@@ -76,8 +76,13 @@ The `.seven/android/experimental-glibc` directory contains:
 the Android NDK produced 16 KiB-aligned Bionic ARM64 shim objects whose
 versioned symbols statically resolve the three existing Copilot `.node`
 modules' GNU/Linux imports. **This is only link-feasibility evidence**.
-The experiment uses Android API 30, while Seven Code targets minSdk 26,
-so the results are not approved for distribution even on ABI grounds.
+The second [API-level qualification matrix](https://github.com/gabriell211/Seven-code/actions/runs/40056926173)
+proved that the **API 30 ELF symbol probe passes** but **API 26 fails**
+with 24 unsatisfied imports (including `posix_spawn*`, `getrandom`,
+`statx` and `_Unwind_*`). Seven Code targets minSdk 26, so the
+experimental shim cannot ship as a universally compatible Android runtime.
+The failures must be implemented correctly and checked against a genuine
+Android 26 environment, not satisfied by no-op stubs.
 
 The fourth file, `copilot-runtime`, is a **Linux executable** with a
 foreign ELF interpreter and different startup requirements; a Bionic
