@@ -94,6 +94,18 @@ echo "--- libglibc-shim.so ---"
 "$CC" -shared -fPIC -O2 -Wall \
     -o "$OUT_DIR/libglibc-shim.so" \
     "$SCRIPT_DIR/glibc-shim.c" \
+    "$SCRIPT_DIR/android-ucontext-bridge.c" \
+    "$SCRIPT_DIR/libucontext/arch/aarch64/getcontext.S" \
+    "$SCRIPT_DIR/libucontext/arch/aarch64/makecontext.c" \
+    "$SCRIPT_DIR/libucontext/arch/aarch64/setcontext.S" \
+    "$SCRIPT_DIR/libucontext/arch/aarch64/swapcontext.S" \
+    "$SCRIPT_DIR/libucontext/arch/aarch64/trampoline.c" \
+    -DFREESTANDING -DEXPORT_UNPREFIXED \
+    -I"$SCRIPT_DIR/libucontext/include" \
+    -I"$SCRIPT_DIR/libucontext/arch/aarch64/include" \
+    -I"$SCRIPT_DIR/libucontext/arch/aarch64" \
+    -I"$SCRIPT_DIR/libucontext/arch/common" \
+    -fomit-frame-pointer \
     -Wl,-soname,libglibc-shim.so \
     -llog \
     "${PAGE_SIZE_FLAGS[@]}" \
