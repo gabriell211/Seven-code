@@ -90,7 +90,7 @@ for (const filename of ['package.nls.json']) {
 delete copilotManifest.main;
 copilotManifest.browser = './dist/web.js';
 copilotManifest.extensionKind = ['ui'];
-writeFileSync(join(copilotDest, 'package.json'), JSON.stringify(copilotManifest, null, 2) + '\\n');
+writeFileSync(join(copilotDest, 'package.json'), JSON.stringify(copilotManifest, null, 2) + '\n');
 
 for (const notice of ['LICENSE.txt', 'ThirdPartyNotices.txt']) {
   if (!existsSync(resolve(notice))) throw new Error('Missing Code OSS notice: ' + notice);
