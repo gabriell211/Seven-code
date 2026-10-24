@@ -22,7 +22,8 @@ internal class SevenLocalGnuRuntime(
     data class Launch(
         val prefix: List<String>,
         val libraryPath: String,
-        val cliWrapper: File
+        val cliWrapper: File,
+        val bootstrap: File
     )
 
     private val nativeDir = File(context.applicationInfo.nativeLibraryDir)
@@ -151,11 +152,32 @@ internal class SevenLocalGnuRuntime(
         check(wrapper.setExecutable(true, true)) {
             "O wrapper GNU do Copilot não pôde receber permissão de execução."
         }
+        // Code OSS launches its extension host with child_process.fork().
+        // process.execPath normally points at the original GNU Node ELF, whose
+        // hard-coded /lib/ld-linux-aarch64.so.1 interpreter does not exist in
+        // Android. A second, local wrapper ensures *every* Node child process
+        // uses our verified, APK-bundled GNU dynamic loader.
+        val nodeWrapper = File(root, "seven-node-gnu.sh")
+        nodeWrapper.writeText(
+            "#!/system/bin/sh\\n" +
+            "exec ${quote(loader.absolutePath)} --library-path ${quote(destination.absolutePath)} " +
+            "${quote(node.absolutePath)} \\"${'$'}@\\"\\n"
+        )
+        check(nodeWrapper.setExecutable(true, true)) {
+            "O wrapper de processos Node GNU não pôde receber permissão de execução."
+        }
+        val bootstrap = File(root, "seven-gnu-fork-bootstrap.cjs")
+        bootstrap.writeText(
+            "Object.defineProperty(process, 'execPath', {configurable: true, " +
+            "writable: true, value: " + JSONObject.quote(nodeWrapper.absolutePath) + "});\\n" +
+            "if (process.execPath !== " + JSONObject.quote(nodeWrapper.absolutePath) +
+            ") throw new Error('Seven GNU Node fork wrapper unavailable');\\n"
+        )
         return Launch(
-            prefix = listOf(loader.absolutePath, "--library-path",
-                destination.absolutePath, node.absolutePath),
+            prefix = listOf(nodeWrapper.absolutePath),
             libraryPath = destination.absolutePath,
-            cliWrapper = wrapper
+            cliWrapper = wrapper,
+            bootstrap = bootstrap
         )
     }
 }
