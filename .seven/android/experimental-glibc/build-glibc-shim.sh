@@ -98,6 +98,7 @@ echo "--- libglibc-shim.so ---"
 "$CC" -shared -fPIC -O2 -Wall \
     -o "$OUT_DIR/libglibc-shim.so" \
     "$SCRIPT_DIR/glibc-shim.c" \
+    "$SCRIPT_DIR/android-api26-syscalls.c" \
     "$SCRIPT_DIR/android-ucontext-bridge.c" \
     "$SCRIPT_DIR/libucontext/arch/aarch64/getcontext.S" \
     "$SCRIPT_DIR/libucontext/arch/aarch64/makecontext.c" \
