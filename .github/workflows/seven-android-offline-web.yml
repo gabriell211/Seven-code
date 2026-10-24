@@ -7,6 +7,9 @@ on:
     paths:
       - ".github/workflows/seven-android-offline-web.yml"
       - ".seven/package-android-web.mjs"
+      - "extensions/copilot/**"
+      - ".seven/tests/android-copilot-chat-command.test.mjs"
+      - "extensions/github-authentication/**"
       - ".seven/verify-android-web.mjs"
       - ".seven/tests/android-web-bundle.test.mjs"
       - "mobile/android/app/src/main/**"
@@ -62,14 +65,21 @@ jobs:
           sdkmanager "platforms;android-36" "build-tools;36.0.0" "cmake;3.22.1" "ndk;27.2.12479018"
       - name: Install exactly pinned Code OSS dependencies
         run: npm ci --no-audit --no-fund
+      - name: Compile the genuine upstream Copilot Chat WEB extension host
+        run: |
+          set -euo pipefail
+          npm --prefix extensions/copilot run compile
+          test -s extensions/copilot/dist/web.js
+          test "$(stat -c %s extensions/copilot/dist/web.js)" -gt 100000
       - name: Compile ORIGINAL Code OSS web production workbench (NOT a mock)
         run: npm run gulp vscode-web-min
       - name: Embed complete compiled Web UI into Android assets
         run: |
           set -euo pipefail
           node .seven/package-android-web.mjs ../vscode-web
-          node --test .seven/tests/android-web-bundle.test.mjs
+          node --test .seven/tests/android-web-bundle.test.mjs .seven/tests/android-copilot-chat-command.test.mjs .seven/tests/android-copilot-shell-tool.test.mjs
           test -s mobile/android/app/src/main/assets/seven-web/out/vs/workbench/workbench.web.main.internal.js
+          test -s mobile/android/app/src/main/assets/seven-web/extensions/copilot-chat/dist/web.js
       - name: Build APK with Android native PTY and embedded Code OSS Web UI
         run: gradle -p mobile/android :app:assembleDebug --no-daemon --stacktrace
       - name: Reject WebView-only shell or broken/unrendered editor assets

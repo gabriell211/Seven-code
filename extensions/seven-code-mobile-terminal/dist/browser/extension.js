@@ -361,6 +361,29 @@ class SevenAndroidAgentShell {
 
 async function activate(context) {
     if (!(await hasNativeHost())) return;
+    // Keep the ORIGINAL Code OSS Chat view and GitHub's upstream Copilot
+    // extension. This is only a mobile command that opens their real UI;
+    // it never mocks a model or assumes the user is authenticated.
+    if (typeof vscode.commands?.registerCommand === 'function') {
+        context.subscriptions.push(vscode.commands.registerCommand(
+            'sevenCode.openCopilotChat', async () => {
+                const copilot = vscode.extensions?.getExtension?.('GitHub.copilot-chat');
+                if (!copilot) {
+                    await vscode.window?.showWarningMessage?.(
+                        'Copilot Chat não está instalado ou não foi carregado neste Seven Code.');
+                    return;
+                }
+                try {
+                    await copilot.activate();
+                    await vscode.commands.executeCommand('workbench.action.chat.open');
+                } catch (error) {
+                    await vscode.window?.showErrorMessage?.(
+                        'Não foi possível ativar Copilot Chat: ' +
+                        String(error?.message || error).slice(0, 280));
+                }
+            }
+        ));
+    }
     if (typeof vscode.workspace?.registerFileSystemProvider === 'function' &&
         typeof vscode.commands?.registerCommand === 'function') {
         const files = new SevenAndroidDocuments();
