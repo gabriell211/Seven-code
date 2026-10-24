@@ -5,6 +5,7 @@ import org.json.JSONObject
 import java.io.File
 import java.security.MessageDigest
 import java.util.zip.ZipInputStream
+import java.util.zip.ZipFile
 
 /**
  * Experimental Android ARM64 path for running the ORIGINAL GNU/Linux Code OSS
@@ -27,8 +28,78 @@ internal class SevenLocalGnuRuntime(
     )
 
     private val nativeDir = File(context.applicationInfo.nativeLibraryDir)
-    private val loader = File(nativeDir, "libseven-gnu-loader.so")
-    private val node = File(nativeDir, "libseven-gnu-node.so")
+    private val maximumExecutableBytes = 125_000_000L
+
+    /**
+     * Android chooses the primary ABI when extracting lib/ to nativeLibraryDir.
+     * On an x86_64 emulator with an ARM64 native bridge, the standalone APK
+     * still contains our ARM64 GNU executables but PackageManager extracts
+     * only the x86_64 JNI libraries. Source them from the *signed APK itself*,
+     * never the network, and verify exactly the original binary digest.
+     *
+     * The experimental APK temporarily targets SDK 28. Executable files
+     * inside app-private storage are not supported as a production solution
+     * on modern Android targets and remain subject to real-device acceptance.
+     */
+    private fun verifiedExecutable(name: String, digest: String): File {
+        check(name in setOf("libseven-gnu-loader.so", "libseven-gnu-node.so")) {
+            "Nome de executável GNU inesperado."
+        }
+        check(digest.matches(Regex("[a-fA-F0-9]{64}"))) {
+            "SHA-256 do executável GNU é inválido."
+        }
+        val native = File(nativeDir, name)
+        if (native.isFile && native.canExecute() && hash(native).equals(digest, true)) {
+            return native
+        }
+        val destinationDir = File(root, "gnu-executables")
+        check(destinationDir.isDirectory || destinationDir.mkdirs()) {
+            "Falha ao preparar a pasta privada GNU."
+        }
+        val target = File(destinationDir, name)
+        if (target.isFile && target.canExecute() && hash(target).equals(digest, true)) {
+            return target
+        }
+        val stage = File(destinationDir, "$name.partial")
+        stage.delete()
+        try {
+            ZipFile(context.applicationInfo.sourceDir).use { apk ->
+                val entry = apk.getEntry("lib/arm64-v8a/$name")
+                    ?: error("O APK instalado não contém o executável GNU ARM64: $name")
+                check(!entry.isDirectory && entry.size in 1..maximumExecutableBytes) {
+                    "Tamanho inesperado do executável GNU ARM64: $name"
+                }
+                apk.getInputStream(entry).use { input ->
+                    stage.outputStream().use { output ->
+                        val buffer = ByteArray(64 * 1024)
+                        var bytes = 0L
+                        while (true) {
+                            val read = input.read(buffer)
+                            if (read < 0) break
+                            bytes += read
+                            check(bytes <= maximumExecutableBytes) {
+                                "O executável GNU excede o limite de segurança."
+                            }
+                            output.write(buffer, 0, read)
+                        }
+                    }
+                }
+            }
+            check(hash(stage).equals(digest, true)) {
+                "O executável GNU extraído não corresponde ao SHA-256 do APK: $name"
+            }
+            check(stage.setExecutable(true, true)) {
+                "O sistema Android recusou permissão de execução ao binário GNU."
+            }
+            target.delete()
+            check(stage.renameTo(target) && target.canExecute()) {
+                "Falha ao ativar o executável GNU verificado."
+            }
+            return target
+        } finally {
+            stage.delete()
+        }
+    }
 
     fun hasBundle(): Boolean = try {
         context.assets.open("seven-local/gnu-manifest.json").use { }
@@ -67,13 +138,8 @@ internal class SevenLocalGnuRuntime(
         check(android.os.Build.SUPPORTED_ABIS.contains("arm64-v8a")) {
             "O runtime GNU exige ARM64."
         }
-        check(loader.isFile && loader.canExecute() && node.isFile && node.canExecute()) {
-            "O carregador e o Node GNU ARM64 devem estar embutidos nas bibliotecas do APK."
-        }
-        check(hash(loader).equals(manifest.getString("loaderSha256"), true) &&
-            hash(node).equals(manifest.getString("nodeSha256"), true)) {
-            "O carregador ou o Node GNU não corresponde ao SHA-256 verificado."
-        }
+        val loader = verifiedExecutable("libseven-gnu-loader.so", manifest.getString("loaderSha256"))
+        val node = verifiedExecutable("libseven-gnu-node.so", manifest.getString("nodeSha256"))
 
         val original = manifest.getJSONObject("originalCopilotElf")
         check(original.length() == 4) { "Os quatro componentes Copilot originais são obrigatórios." }
