@@ -5,14 +5,21 @@ on:
   push:
     branches: [main]
     paths:
+      # Everything that can change the bundled Code OSS, Copilot, Android
+      # host, native addons, or runtime provenance must rebuild from source.
       - ".github/workflows/seven-android-codeoss-arm64.yml"
-      - ".seven/android/audit-codeoss-abi.py"
-      - ".seven/android/fetch-bionic-node.py"
-      - ".seven/android/termux-repository-key.asc"
-      - "build/gulpfile.reh.ts"
-      - "src/vs/workbench/browser/sevenMobileTerminalBridge.ts"
-      - "src/vs/workbench/contrib/terminal/browser/sevenAndroidTerminalProcess.ts"
-      - "extensions/seven-code-mobile-terminal/**"
+      - ".seven/android/**"
+      - ".seven/package-android-local-runtime.mjs"
+      - ".seven/verify-standalone-apk.py"
+      - "mobile/android/**"
+      - "src/**"
+      - "extensions/**"
+      - "remote/**"
+      - "build/**"
+      - "product.json"
+      - "package.json"
+      - "package-lock.json"
+      - ".nvmrc"
 
 permissions:
   contents: read

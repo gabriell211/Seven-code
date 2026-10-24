@@ -21,7 +21,11 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
+      # workflow_run uses the recorded upstream commit, not the current main
+      # tip (which may have advanced while ARM64 compilation was running).
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
