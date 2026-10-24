@@ -1,0 +1,56 @@
+name: Seven Code Android - research isolated GNU ARM64 Copilot process
+
+on:
+  workflow_run:
+    workflows: ["Seven Code Android - compile Code OSS ARM64"]
+    types: [completed]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  isolated-glibc-probe:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 40
+    name: Prove separate GNU ARM64 Node/Copilot library closure (NOT Android acceptance)
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - name: Download exact source run - never reuse old binaries
+        uses: actions/download-artifact@v4
+        with:
+          name: SevenCode-CodeOSS-linux-arm64-build
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/inputs
+      - name: Extract original Linux ARM64 Code OSS
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = aarch64
+          test -s "$RUNNER_TEMP/inputs/SevenCode-CodeOSS-linux-arm64-build.tar.gz"
+          mkdir -p "$RUNNER_TEMP/compiled"
+          tar -xzf "$RUNNER_TEMP/inputs/SevenCode-CodeOSS-linux-arm64-build.tar.gz" -C "$RUNNER_TEMP/compiled"
+          test -s "$RUNNER_TEMP/compiled/vscode-reh-web-linux-arm64/node"
+      - name: Build and execute isolated GNU ELF closure on ARM64 Linux
+        run: |
+          set -euo pipefail
+          python3 .seven/android/build-isolated-gnu-runtime.py \
+            "$RUNNER_TEMP/compiled/vscode-reh-web-linux-arm64" \
+            "$RUNNER_TEMP/gnu-runtime"
+          node -e "const m=require(process.argv[1]);if(m.androidVerified!==false||m.releaseEligible!==false||Object.keys(m.originalCopilotElf).length!==4)process.exit(1)" "$RUNNER_TEMP/gnu-runtime/manifest.json"
+          tar -C "$RUNNER_TEMP" -czf "$RUNNER_TEMP/gnu-runtime-research.tar.gz" gnu-runtime
+          test -s "$RUNNER_TEMP/gnu-runtime-research.tar.gz"
+      - name: Keep research evidence separate from any APK/release
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SevenCode-GNU-arm64-separate-process-research-only
+          path: ${{ runner.temp }}/gnu-runtime-research.tar.gz
+          retention-days: 7
+          if-no-files-found: error
