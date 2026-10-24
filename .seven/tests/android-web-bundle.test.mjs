@@ -18,6 +18,8 @@ test('Android packages ORIGINAL static Code OSS web workbench with no URL prompt
     const copilot = join(dir, 'copilot-source-fixture');
     mkdirSync(join(copilot, 'dist'), { recursive: true });
     writeFileSync(join(copilot, 'dist/web.js'), Buffer.alloc(100_001, 33));
+    writeFileSync(join(copilot, 'dist/tree-sitter.wasm'), Buffer.alloc(32, 42));
+    writeFileSync(join(copilot, 'dist/tikTokenizerWorker.js'), 'self.onmessage=()=>{}');
     writeFileSync(join(copilot, 'package.json'), JSON.stringify({
       name: 'copilot-chat', publisher: 'GitHub',
       version: '0.72.0', main: './dist/extension.js', contributes: { commands: [] },
@@ -47,6 +49,8 @@ test('Android packages ORIGINAL static Code OSS web workbench with no URL prompt
     assert.equal(copilotManifest.browser, './dist/web.js');
     assert.equal(copilotManifest.main, undefined);
     assert.ok(existsSync(join(destination, 'extensions/copilot-chat/dist/web.js')));
+    assert.ok(existsSync(join(destination, 'extensions/copilot-chat/dist/tree-sitter.wasm')));
+    assert.ok(existsSync(join(destination, 'extensions/copilot-chat/dist/tikTokenizerWorker.js')));
     assert.ok(existsSync(join(destination, 'extensions/copilot-chat/LICENSE.txt')));
     const metadata = JSON.parse(readFileSync(join(destination, 'bundle.json'), 'utf8'));
     assert.equal(metadata.noNodeRequiredForUi, true);
