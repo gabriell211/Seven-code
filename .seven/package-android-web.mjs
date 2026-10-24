@@ -83,7 +83,7 @@ const childWebWorkers = new Set([
 for (const filename of readdirSync(copilotDist)) {
   const source = join(copilotDist, filename);
   if (!statSync(source).isFile()) continue;
-  if (childWebWorkers.has(filename) || /\\.(?:wasm|json|bpe|tiktoken)$/.test(filename)) {
+  if (childWebWorkers.has(filename) || /\.(?:wasm|json|bpe|tiktoken)$/.test(filename)) {
     cpSync(source, join(copilotDest, 'dist', filename));
   }
 }
