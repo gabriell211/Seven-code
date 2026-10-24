@@ -5,7 +5,6 @@ interface SevenNativeTerminalHost {
 interface SevenMobileEvent {
     type: string;
     sessionId?: string;
-    value?: string;
     exitCode?: number | null;
     pid?: number;
     cwd?: string;

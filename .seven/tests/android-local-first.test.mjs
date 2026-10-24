@@ -9,8 +9,9 @@ test('Seven Code Android starts only its embedded Code OSS runtime', () => {
   const startup = main.split('override fun onCreate(savedInstanceState: Bundle?)')[1]
     ?.split('private fun startLocalWorkbench()')[0];
   assert.ok(startup, 'MainActivity.onCreate must exist');
+  assert.match(startup, /openWorkbench\(embeddedWebUrl\)/);
   assert.match(startup, /startLocalWorkbench\(\)/);
-  assert.doesNotMatch(startup, /showServerSetup|getPreferences|openWorkbench\(/);
+  assert.doesNotMatch(startup, /showServerSetup|getPreferences/);
   assert.match(runtime, /check\(hasBundle\(\)\)/);
   assert.match(runtime, /127\.0\.0\.1/);
 });

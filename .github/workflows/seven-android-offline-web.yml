@@ -1,0 +1,103 @@
+name: Seven Code Android - original Web workbench OFFLINE APK (test only)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/seven-android-offline-web.yml"
+      - ".seven/package-android-web.mjs"
+      - ".seven/verify-android-web.mjs"
+      - ".seven/tests/android-web-bundle.test.mjs"
+      - "mobile/android/app/src/main/**"
+      - "mobile/android/app/src/androidTest/java/dev/seven/code/SevenOfflineWebWorkbenchDeviceTest.kt"
+      - "build/gulpfile.vscode.web.ts"
+      - "src/vs/code/browser/workbench/**"
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/seven-android-offline-web.yml"
+      - ".seven/package-android-web.mjs"
+      - ".seven/verify-android-web.mjs"
+      - ".seven/tests/android-web-bundle.test.mjs"
+      - "mobile/android/app/src/main/**"
+      - "mobile/android/app/src/androidTest/java/dev/seven/code/SevenOfflineWebWorkbenchDeviceTest.kt"
+      - "build/gulpfile.vscode.web.ts"
+      - "src/vs/code/browser/workbench/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: seven-android-offline-web-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  original-web-in-apk:
+    name: Bundle real Code OSS Web in APK and test emulator startup
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      NODE_OPTIONS: --max-old-space-size=6144
+      VSCODE_QUALITY: oss
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v4
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.13"
+      - name: Install Code OSS native build requirements and Android SDK
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libsecret-1-dev libkrb5-dev libx11-dev libxkbfile-dev libnotify-dev libnss3-dev libatk-bridge2.0-dev libasound2-dev libgbm-dev unzip binutils
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-36" "build-tools;36.0.0" "cmake;3.22.1" "ndk;27.2.12479018"
+      - name: Install exactly pinned Code OSS dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Compile ORIGINAL Code OSS web production workbench (NOT a mock)
+        run: npm run gulp vscode-web-min
+      - name: Embed complete compiled Web UI into Android assets
+        run: |
+          set -euo pipefail
+          node .seven/package-android-web.mjs ../vscode-web
+          node --test .seven/tests/android-web-bundle.test.mjs
+          test -s mobile/android/app/src/main/assets/seven-web/out/vs/workbench/workbench.web.main.internal.js
+      - name: Build APK with Android native PTY and embedded Code OSS Web UI
+        run: gradle -p mobile/android :app:assembleDebug --no-daemon --stacktrace
+      - name: Reject WebView-only shell or broken/unrendered editor assets
+        run: |
+          node .seven/verify-android-web.mjs
+          sha256sum mobile/android/app/build/outputs/apk/debug/app-debug.apk
+      - name: Require real hardware acceleration for emulator E2E
+        run: |
+          test -e /dev/kvm || { echo "::error::Hosted runner has no KVM"; exit 1; }
+          sudo chmod 666 /dev/kvm
+      - name: Boot real Android WebView and verify original editor actually renders
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          profile: pixel_5
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: |
+            gradle -p mobile/android :app:connectedDebugAndroidTest --no-daemon --stacktrace -Pandroid.testInstrumentationRunnerArguments.class=dev.seven.code.SevenOfflineWebWorkbenchDeviceTest
+      - name: Attach APK ONLY after actual on-emulator Web Workbench test passes
+        run: |
+          mkdir -p "$RUNNER_TEMP/offline-web-apk"
+          cp mobile/android/app/build/outputs/apk/debug/app-debug.apk             "$RUNNER_TEMP/offline-web-apk/SevenCode-Android-Web-offline-tested-debug.apk"
+          (cd "$RUNNER_TEMP/offline-web-apk" && sha256sum *.apk > SHA256SUMS.txt && sha256sum -c SHA256SUMS.txt)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SevenCode-Android-Web-offline-emulator-verified
+          path: ${{ runner.temp }}/offline-web-apk/
+          if-no-files-found: error
+          retention-days: 14
