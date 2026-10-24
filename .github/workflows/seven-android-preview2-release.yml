@@ -127,7 +127,7 @@ jobs:
     if: ${{ false }}
     name: Publish verified Android-only developer preview
     needs: [android, server]
-    if: ${{ needs.android.result == 'success' && needs.server.result == 'success' }}
+    # Prior green-build condition retired: publisher remains unconditionally disabled.
     runs-on: ubuntu-24.04
     permissions:
       contents: write
