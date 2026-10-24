@@ -40,7 +40,7 @@ class SevenWebViewNativeBridgeTest {
                     window.sevenNativeEvent = event => {
                         window.sevenEvents.push(event);
                         if (event.type === "ready" && event.sessionId === "$session") {
-                            const command = 'printf "SEVEN_WEBVIEW_PTY_OK\\n"\\n';
+                            const command = 'printf "SEVEN_WEBVIEW_PTY_OK\n"\n';
                             const data = btoa(command);
                             SevenTerminalNative.postMessage(JSON.stringify({
                                 type: "input", sessionId: "$session", data
