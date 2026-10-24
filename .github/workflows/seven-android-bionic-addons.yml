@@ -9,7 +9,11 @@ on:
   # avoiding a second four-minute upstream compilation for an NDK script fix.
   push:
     branches: [main]
-    paths: [".github/workflows/seven-android-bionic-addons.yml"]
+    paths:
+      - ".github/workflows/seven-android-bionic-addons.yml"
+      - "mobile/android/tools/build-bionic-addons.sh"
+      - ".seven/android/fetch-android-kerberos.py"
+      - ".seven/android/merge-kerberos-runtime.py"
 
 permissions:
   actions: read
