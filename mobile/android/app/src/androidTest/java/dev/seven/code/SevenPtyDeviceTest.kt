@@ -1,6 +1,7 @@
 package dev.seven.code
 
 import android.content.Context
+import android.net.Uri
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.EditText
@@ -10,6 +11,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.seven.code.terminal.SevenPty
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -27,6 +29,17 @@ import java.util.concurrent.atomic.AtomicReference
  */
 @RunWith(AndroidJUnit4::class)
 class SevenPtyDeviceTest {
+    @Test
+    fun oauthPopupLinksCannotEscapeToInsecureOrEmbeddedCredentialUrls() {
+        assertTrue(safeExternalHttpsTarget(Uri.parse("https://github.com/login/device")))
+        assertTrue(safeExternalHttpsTarget(Uri.parse("https://login.microsoftonline.com/common/oauth2/authorize")))
+        assertFalse(safeExternalHttpsTarget(Uri.parse("http://github.com/login/device")))
+        assertFalse(safeExternalHttpsTarget(Uri.parse("javascript:alert(1)")))
+        assertFalse(safeExternalHttpsTarget(Uri.parse("file:///sdcard/Downloads/token")))
+        assertFalse(safeExternalHttpsTarget(Uri.parse("https://user:pass@github.com/login/device")))
+        assertFalse(safeExternalHttpsTarget(Uri.parse("https://bad..example.com/login")))
+    }
+
     @Test
     fun appStartsAndRejectsNonHttpsWorkbench() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
