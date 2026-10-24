@@ -129,6 +129,10 @@ jobs:
           if-no-files-found: error
 
   release:
+    # DISABLED: Android release MUST be one standalone APK with Code OSS + Bionic Node + addons inside.
+    # Old preview/alpha workflows published thin APK and separate Linux server artifacts.
+    # Only a future standalone, device-tested release workflow may enable publishing.
+    if: ${{ false }}
     needs: [android, ios, server]
     runs-on: ubuntu-24.04
     steps:
