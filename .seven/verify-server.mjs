@@ -105,6 +105,44 @@ try {
 				'Runtime errors in compiled editor: ' + errors.slice(0, 5).join(' | '));
 			console.log('Authenticated Chromium loaded the compiled Code OSS workbench and editor part.');
 			await context.close();
+
+			// Prove the compiled Code OSS command palette actually creates the
+			// original terminal instance with our Android-native process adapter.
+			// The native host is simulated here; the Android emulator separately
+			// tests the real WebMessageListener, approval dialog and JNI PTY.
+			const mobileContext = await browser.newContext();
+			try {
+				await mobileContext.addCookies([{ name: 'vscode-tkn', value: token, url: base + '/' }]);
+				await mobileContext.addInitScript(() => {
+					window.__sevenNativeMessages = [];
+					window.SevenTerminalNative = {
+						postMessage: text => window.__sevenNativeMessages.push(JSON.parse(text))
+					};
+				});
+				const mobilePage = await mobileContext.newPage();
+				await mobilePage.goto(base + '/', { waitUntil: 'domcontentloaded', timeout: 60_000 });
+				await mobilePage.locator('.monaco-workbench').waitFor({ state: 'visible', timeout: 90_000 });
+				await mobilePage.keyboard.press('F1');
+				const filter = mobilePage.locator('.quick-input-widget:visible input').first();
+				await filter.waitFor({ state: 'visible', timeout: 15_000 });
+				await filter.fill('>Terminal: Create New Terminal');
+				await mobilePage.locator('.quick-input-widget:visible .monaco-list-row').first()
+					.waitFor({ state: 'visible', timeout: 15_000 });
+				await mobilePage.keyboard.press('Enter');
+				await mobilePage.waitForFunction(
+					() => window.__sevenNativeMessages?.some(message => message.type === 'start'),
+					undefined,
+					{ timeout: 30_000 }
+				);
+				const launch = await mobilePage.evaluate(
+					() => window.__sevenNativeMessages.find(message => message.type === 'start')
+				);
+				assert.match(launch.sessionId, /^[a-f0-9]{32}$/);
+				assert.ok(launch.cols > 0 && launch.rows > 0);
+				console.log('Actual compiled Code OSS workbench routed a terminal into the Android-native PTY adapter.');
+			} finally {
+				await mobileContext.close();
+			}
 		} finally {
 			await browser.close();
 		}
