@@ -1,6 +1,11 @@
 name: Seven Code Android - research isolated GNU ARM64 Copilot process
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/seven-android-glibc-process-probe.yml"
+      - ".seven/android/build-isolated-gnu-runtime.py"
   workflow_run:
     workflows: ["Seven Code Android - compile Code OSS ARM64"]
     types: [completed]
@@ -12,21 +17,63 @@ permissions:
 jobs:
   isolated-glibc-probe:
     if: >-
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.head_branch == 'main' &&
-      github.event.workflow_run.head_repository.full_name == github.repository
+      github.event_name == 'push' ||
+      (
+        github.event_name == 'workflow_run' &&
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.head_branch == 'main' &&
+        github.event.workflow_run.head_repository.full_name == github.repository
+      )
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 40
     name: Prove separate GNU ARM64 Node/Copilot library closure (NOT Android acceptance)
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - name: Resolve verified equivalent Code OSS source run
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == workflow_run ]]; then
+            run_id="${{ github.event.workflow_run.id }}"
+            source_sha="${{ github.event.workflow_run.head_sha }}"
+          else
+            # Fast research iteration: use a successful ARM64 build only when
+            # EVERY editor, extension and mobile runtime input matches HEAD.
+            run_id=""
+            source_sha=""
+            while read -r candidate_id candidate_sha; do
+              [[ "$candidate_sha" =~ ^[0-9a-f]{40}$ ]] || continue
+              git fetch --no-tags --depth=1 origin "$candidate_sha"
+              if git diff --quiet "$candidate_sha" HEAD -- \
+                .github/workflows/seven-android-codeoss-arm64.yml \
+                src extensions remote build mobile/android product.json \
+                package.json package-lock.json .nvmrc; then
+                run_id="$candidate_id"
+                source_sha="$candidate_sha"
+                break
+              fi
+            done < <(
+              gh api "repos/$GITHUB_REPOSITORY/actions/workflows/seven-android-codeoss-arm64.yml/runs?branch=main&status=success&per_page=25" \
+                --jq '.workflow_runs[] | "\(.id) \(.head_sha)"'
+            )
+            test -n "$run_id" || {
+              echo "::error::No successful ARM64 Code OSS run with byte-identical runtime sources. Run full Code OSS compilation."
+              exit 1
+            }
+          fi
+          [[ "$run_id" =~ ^[0-9]+$ && "$source_sha" =~ ^[0-9a-f]{40}$ ]]
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+          echo "source_sha=$source_sha" >> "$GITHUB_OUTPUT"
+          echo "Testing original Code OSS source $source_sha from signed run $run_id"
       - name: Download exact source run - never reuse old binaries
         uses: actions/download-artifact@v4
         with:
           name: SevenCode-CodeOSS-linux-arm64-build
-          run-id: ${{ github.event.workflow_run.id }}
+          run-id: ${{ steps.source.outputs.run_id }}
           github-token: ${{ github.token }}
           path: ${{ runner.temp }}/inputs
       - name: Extract original Linux ARM64 Code OSS
@@ -37,6 +84,9 @@ jobs:
           mkdir -p "$RUNNER_TEMP/compiled"
           tar -xzf "$RUNNER_TEMP/inputs/SevenCode-CodeOSS-linux-arm64-build.tar.gz" -C "$RUNNER_TEMP/compiled"
           test -s "$RUNNER_TEMP/compiled/vscode-reh-web-linux-arm64/node"
+          node -e "const p=require(process.argv[1]);if(p.commit!==process.argv[2])throw Error('Downloaded Linux Code OSS product commit differs from resolved source')" \
+            "$RUNNER_TEMP/compiled/vscode-reh-web-linux-arm64/product.json" \
+            "${{ steps.source.outputs.source_sha }}"
       - name: Build and execute isolated GNU ELF closure on ARM64 Linux
         run: |
           set -euo pipefail
