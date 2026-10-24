@@ -18,6 +18,10 @@ for (const entry of [
   'assets/seven-web/bundle.json',
   'assets/seven-web/extensions/seven-code-mobile-terminal/package.json',
   'assets/seven-web/extensions/seven-code-mobile-terminal/dist/browser/extension.js',
+  'assets/seven-web/extensions/copilot-chat/package.json',
+  'assets/seven-web/extensions/copilot-chat/dist/web.js',
+  'assets/seven-web/extensions/copilot-chat/LICENSE.txt',
+  'assets/seven-web/extensions/github-authentication/package.json',
   'lib/arm64-v8a/libsevenpty.so',
   'classes.dex',
 ]) {
@@ -29,8 +33,23 @@ assert.ok(bootstrap.includes('./out/vs/workbench/workbench.web.main.internal.js'
 assert.ok(!html.includes('{{WORKBENCH_'), 'Server template tokens were not replaced');
 assert.ok(bootstrap.includes('additionalBuiltinExtensions') && bootstrap.includes('seven-code-mobile-terminal'),
   'Android native terminal extension is not registered with original Web Workbench');
+assert.ok(bootstrap.includes('/extensions/copilot-chat') &&
+  bootstrap.includes('/extensions/github-authentication'),
+  'Real Copilot and GitHub auth are not registered with the original Web Workbench');
+const copilotWeb = unzip(['-p', apk, 'assets/seven-web/extensions/copilot-chat/dist/web.js']);
+assert.ok(copilotWeb.length > 100_000, 'Real compiled Copilot web worker is missing');
+const copilotManifest = JSON.parse(unzip(['-p', apk,
+  'assets/seven-web/extensions/copilot-chat/package.json']).toString('utf8'));
+assert.equal(copilotManifest.publisher, 'GitHub');
+assert.equal(copilotManifest.name, 'copilot-chat');
+assert.equal(copilotManifest.browser, './dist/web.js');
+assert.ok(!copilotManifest.main,
+  'Android WebView cannot load the upstream Node-only Copilot entrypoint');
 const metadata = JSON.parse(unzip(['-p', apk, 'assets/seven-web/bundle.json']).toString('utf8'));
 assert.equal(metadata.noNodeRequiredForUi, true);
 assert.equal(metadata.remoteNodeExtensions, false);
+assert.equal(metadata.copilotWebWorkerPackaged, true);
+assert.equal(metadata.copilotNodeExtensionHostReady, false);
+assert.equal(metadata.copilotAuthenticationE2EVerified, false);
 console.log('Android APK contains compiled original Code OSS offline Web UI.');
-console.log('Only Android emulator/device E2E can prove startup; Node extensions/Copilot remain unverified.');
+console.log('Genuine Copilot Web worker is present; GitHub OAuth/Chat/Agent E2E remain unverified.');
