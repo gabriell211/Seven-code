@@ -93,7 +93,8 @@ jobs:
           python3 .seven/android/build-isolated-gnu-runtime.py \
             "$RUNNER_TEMP/compiled/vscode-reh-web-linux-arm64" \
             "$RUNNER_TEMP/gnu-runtime"
-          node -e "const m=require(process.argv[1]);if(m.androidVerified!==false||m.releaseEligible!==false||Object.keys(m.originalCopilotElf).length!==4)process.exit(1)" "$RUNNER_TEMP/gnu-runtime/manifest.json"
+          node -e "const fs=require('fs');const p=process.argv[1],m=JSON.parse(fs.readFileSync(p));if(m.androidVerified!==false||m.releaseEligible!==false||Object.keys(m.originalCopilotElf).length!==4)process.exit(1);m.sourceSha=process.argv[2];m.codeossRunId=Number(process.argv[3]);if(!/^[a-f0-9]{40}$/.test(m.sourceSha)||!Number.isSafeInteger(m.codeossRunId))process.exit(1);fs.writeFileSync(p,JSON.stringify(m,null,2)+'\\n')" \
+            "$RUNNER_TEMP/gnu-runtime/manifest.json" "${{ steps.source.outputs.source_sha }}" "${{ steps.source.outputs.run_id }}"
           tar -C "$RUNNER_TEMP" -czf "$RUNNER_TEMP/gnu-runtime-research.tar.gz" gnu-runtime
           test -s "$RUNNER_TEMP/gnu-runtime-research.tar.gz"
       - name: Actually load original Copilot native addons into isolated GNU ARM64 Node
