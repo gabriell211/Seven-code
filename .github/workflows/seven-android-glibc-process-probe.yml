@@ -50,7 +50,7 @@ jobs:
               git fetch --no-tags --depth=1 origin "$candidate_sha"
               if git diff --quiet "$candidate_sha" HEAD -- \
                 .github/workflows/seven-android-codeoss-arm64.yml \
-                src extensions remote build mobile/android product.json \
+                src extensions remote build product.json \
                 package.json package-lock.json .nvmrc; then
                 run_id="$candidate_id"
                 source_sha="$candidate_sha"
@@ -170,6 +170,37 @@ jobs:
           }
           echo "ORIGINAL Code OSS ARM64 workbench and authenticated /version loaded under GNU runtime."
           echo "RESEARCH ONLY: no Android kernel, physical device or real Copilot OAuth was tested."
+      - name: Verify original GNU Code OSS can fork an extension-host Node child via wrapper
+        run: |
+          set -euo pipefail
+          loader="$RUNNER_TEMP/gnu-runtime/ld-linux-aarch64.so.1"
+          node="$RUNNER_TEMP/gnu-runtime/node"
+          libs="$RUNNER_TEMP/gnu-runtime/lib"
+          wrapper="$RUNNER_TEMP/gnu-runtime/seven-node-gnu-test.sh"
+          bootstrap="$RUNNER_TEMP/gnu-runtime/seven-node-fork-test.cjs"
+          child="$RUNNER_TEMP/gnu-runtime/seven-node-child-test.cjs"
+          # Linux-only equivalent of Android's private /system/bin/sh wrapper.
+          printf '#!/bin/sh\\nexec "%s" --library-path "%s" "%s" "$@"\\n' \
+            "$loader" "$libs" "$node" > "$wrapper"
+          chmod 700 "$wrapper"
+          printf "Object.defineProperty(process, 'execPath', { configurable: true, writable: true, value: '%s' });\\n" \
+            "$wrapper" > "$bootstrap"
+          printf "process.send({ marker: 'ORIGINAL_CODEOSS_GNU_CHILD_OK', executable: process.execPath });\\n" > "$child"
+          export NODE_OPTIONS="--require=$bootstrap"
+          "$wrapper" -e '
+            const cp = require("node:child_process");
+            const child = cp.fork(process.argv[1], {silent: true});
+            const timer = setTimeout(() => {child.kill();process.exit(2);}, 15000);
+            child.on("message", message => {
+              if (message.marker !== "ORIGINAL_CODEOSS_GNU_CHILD_OK" ||
+                  message.executable !== process.execPath) process.exit(3);
+              clearTimeout(timer);
+              console.log("Original GNU ARM64 Code OSS Node fork and IPC succeeded");
+              child.disconnect();
+            });
+            child.on("error", e => {console.error(e);process.exit(4);});
+          ' "$child"
+          echo "Isolated GNU Node can launch its original child_process.fork extension-host runtime."
       - name: Keep research evidence separate from any APK/release
         if: success()
         uses: actions/upload-artifact@v4
