@@ -18,7 +18,6 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Button
-import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.webkit.WebViewCompat
@@ -59,19 +58,9 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         localServer = SevenLocalCodeOssServer(this)
         mobileDocuments = SevenMobileDocuments(this)
-        // A complete Android-compatible Code OSS bundle boots directly into
-        // the upstream workbench, without asking the user for an HTTPS URL.
-        if (localServer?.hasBundle() == true) {
-            startLocalWorkbench()
-            return
-        }
-        // Existing remote-only developer builds retain explicit configuration.
-        val savedUrl = getPreferences(MODE_PRIVATE).getString("workbenchUrl", null)
-        if (savedUrl == null || parseWorkbenchUrl(savedUrl) == null) {
-            showServerSetup()
-        } else {
-            openWorkbench(savedUrl)
-        }
+        // Never ask for a remote URL: incomplete development APKs must fail
+        // clearly rather than masquerade as a standalone Code OSS install.
+        startLocalWorkbench()
     }
 
     private fun startLocalWorkbench() {
@@ -96,16 +85,12 @@ class MainActivity : Activity() {
         }
         layout.addView(TextView(this).apply {
             text = "O editor local não iniciou.\n\n" + reason +
-                "\n\nNenhum outro servidor será escolhido sem sua autorização."
+                "\n\nEste aplicativo usa somente o Code OSS incluído no APK."
             textSize = 17f
         })
         layout.addView(Button(this).apply {
             text = "Tentar abrir o editor novamente"
             setOnClickListener { startLocalWorkbench() }
-        })
-        layout.addView(Button(this).apply {
-            text = "Usar um servidor Code OSS externo"
-            setOnClickListener { showServerSetup(reason) }
         })
         setContentView(layout)
     }
@@ -129,61 +114,8 @@ class MainActivity : Activity() {
         return "https://" + host + port to uri.toString()
     }
 
-    private fun showServerSetup(error: String? = null) {
-        // Revoke bridge access before leaving the trusted workbench screen.
-        localServer?.stop()
-        workbenchActive = false
-        trustedOrigin = ""
-        closeWorkbenchTerminals()
-        mobileDocuments.dispose()
-        closePopupWindows()
-        if (::webView.isInitialized) {
-            webView.stopLoading()
-            webView.loadUrl("about:blank")
-        }
-        val layout = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            val pad = (24 * resources.displayMetrics.density).toInt()
-            setPadding(pad, pad, pad, pad)
-        }
-        layout.addView(TextView(this).apply {
-            text = "Seven Code — Code OSS\n\nInforme o HTTPS do servidor web do Code OSS, compatível com esta versão. " +
-                "Editor, extensões e Git usam o servidor do Code OSS; somente o terminal Android é nativo."
-            textSize = 18f
-        })
-        if (error != null) layout.addView(TextView(this).apply { text = error })
-        val field = EditText(this).apply {
-            hint = "https://seu-servidor-code-oss.exemplo"
-            inputType = android.text.InputType.TYPE_CLASS_TEXT or
-                android.text.InputType.TYPE_TEXT_VARIATION_URI
-            setSingleLine(true)
-            setText(getPreferences(MODE_PRIVATE).getString("workbenchUrl", "") ?: "")
-        }
-        layout.addView(field)
-        layout.addView(Button(this).apply {
-            text = "Abrir editor"
-            setOnClickListener {
-                val candidate = field.text.toString().trim()
-                if (parseWorkbenchUrl(candidate) == null) {
-                    field.error = "Informe uma URL HTTPS válida e sem credenciais na URL"
-                    return@setOnClickListener
-                }
-                AlertDialog.Builder(this@MainActivity)
-                    .setTitle("Confiar neste servidor?")
-                    .setMessage("O servidor escolhido terá acesso à interface do editor. " +
-                        "O terminal Android solicitará aprovação separada antes de abrir cada sessão.\n\n" + candidate)
-                    .setNegativeButton("Cancelar", null)
-                    .setPositiveButton("Confiar e abrir") { _, _ ->
-                        getPreferences(MODE_PRIVATE).edit().putString("workbenchUrl", candidate).apply()
-                        openWorkbench(candidate)
-                    }.show()
-            }
-        })
-        setContentView(layout)
-    }
-
     private fun openWorkbench(url: String) {
-        val parsed = parseWorkbenchUrl(url) ?: return showServerSetup("URL inválida")
+        val parsed = parseWorkbenchUrl(url) ?: return showLocalStartupFailure("URL local inválida.")
         // Stop authorization for the old web document before replacing its WebView.
         workbenchActive = false
         closeWorkbenchTerminals()
@@ -385,15 +317,10 @@ class MainActivity : Activity() {
         showingConnectionError = true
         AlertDialog.Builder(this)
             .setTitle("Não foi possível abrir o Seven Code")
-            .setMessage(reason + if (localServer?.localOrigin == null) {
-                "\n\nO aplicativo precisa de um servidor Code OSS autenticado por HTTPS."
-            } else {
-                "\n\nO servidor Code OSS local precisa continuar em execução no aplicativo."
-            })
+.setMessage(reason + "\n\nO servidor Code OSS local precisa continuar em execução no aplicativo.")
             .setPositiveButton("Tentar novamente") { _, _ ->
                 if (::webView.isInitialized) webView.reload()
             }
-            .setNeutralButton("Alterar servidor") { _, _ -> showServerSetup(reason) }
             .setNegativeButton("Cancelar", null)
             .setOnDismissListener { showingConnectionError = false }
             .show()

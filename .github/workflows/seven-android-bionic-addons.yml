@@ -4,7 +4,7 @@ on:
   workflow_run:
     workflows: ["Seven Code Android - compile Code OSS ARM64"]
     types: [completed]
-  workflow_dispatch:
+  # Manual dispatch removed: that path skipped native compilation and reported false success.
   # One-time reproducible recovery of the already verified ARM64 source run,
   # avoiding a second four-minute upstream compilation for an NDK script fix.
   push:
@@ -119,3 +119,14 @@ jobs:
           path: ${{ runner.temp }}/native-bionic
           if-no-files-found: error
           retention-days: 14
+      - name: Block standalone APK packaging when ABI conversion is incomplete
+        if: github.event_name == 'workflow_run' || github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          report="$RUNNER_TEMP/staging/ANDROID-BIONIC-ABI-REPORT.txt"
+          test -s "$report"
+          if ! grep -Fxq 'ABI_STATUS=READY' "$report"; then
+            echo "::error::Code OSS still includes GNU/Linux/glibc binaries. Bionic compilation alone is NOT Android acceptance; refusing a green APK prerequisite."
+            exit 1
+          fi
+

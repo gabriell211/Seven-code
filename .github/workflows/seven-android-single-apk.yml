@@ -4,7 +4,7 @@ on:
   workflow_run:
     workflows: ["Seven Code Android - convert Code OSS native modules to Bionic"]
     types: [completed]
-  workflow_dispatch:
+  # No-op manual dispatch removed: it never assembled an APK or published an artifact.
   # Repeat the last verified NDK artifacts after workflow-only packaging fixes.
   push:
     branches: [main]
