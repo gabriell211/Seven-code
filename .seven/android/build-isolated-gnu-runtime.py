@@ -19,7 +19,8 @@ AARCH64 = 183
 ELF_MAGIC = b"\x7fELF"
 IGNORED_SUBTREES = (
     "/linux-x64/", "/win32-", "/darwin-", "/alpine-",
-    "/ia32/", "/linux-armhf/", "/linux-arm/",
+    "/ia32/", "/linux-armhf/", "/linux-arm/", "/x64/",
+    "/x86_64/", "/i386/", "/amd64/", "/armeabi-v7a/",
 )
 REQUIRED_COPILOT = (
     "extensions/copilot/node_modules/@github/copilot/sdk/prebuilds/linux-arm64/runtime.node",
@@ -30,7 +31,18 @@ REQUIRED_COPILOT = (
 
 
 def sha256(file):
-    return hashlib.file_digest(file.open("rb"), "sha256").hexdigest()
+    with file.open("rb") as stream:
+        return hashlib.file_digest(stream, "sha256").hexdigest()
+
+
+def is_foreign_architecture_path(relative_path):
+    """Only ignore explicitly architecture-qualified, unused vendor binaries.
+
+    An ELF with the wrong architecture in a *generic* path remains a hard
+    error: it could be reached by the ARM64 extension host at runtime.
+    """
+    normalized = "/" + relative_path.replace("\\\\", "/").strip("/")
+    return any(part in normalized for part in IGNORED_SUBTREES)
 
 
 def tool(name, *args):
@@ -126,12 +138,14 @@ def main():
     for path in server.rglob("*"):
         if not path.is_file() or path.is_symlink():
             continue
-        rel = "/" + str(path.relative_to(server))
-        if any(bad in rel for bad in IGNORED_SUBTREES):
-            continue
-        with path.open("rb") as f:
-            if f.read(4) != ELF_MAGIC:
+        rel = str(path.relative_to(server))
+        with path.open("rb") as source:
+            if source.read(4) != ELF_MAGIC:
                 continue
+        if is_foreign_architecture_path(rel):
+            continue
+        # Keep all unqualified ELF objects under scrutiny. In particular,
+        # Copilot's Linux/ARM64 .node files must NOT be skipped.
         if not elf(path):
             raise ValueError("Unexpected incompatible native ELF: " + rel)
         binaries.append(path)

@@ -25,6 +25,18 @@ class IsolatedGnuRuntimeTests(unittest.TestCase):
         self.assertIn("libc.so.6", code)
         self.assertIn("--library-path", code)
 
+
+    def test_foreign_architecture_vendor_elf_is_not_misidentified_as_aarch64(self):
+        self.assertTrue(SCRIPT.is_foreign_architecture_path(
+            "node_modules/@vscode/sandbox-runtime/vendor/seccomp/x64/apply-seccomp"))
+        self.assertTrue(SCRIPT.is_foreign_architecture_path(
+            "node_modules/@vendor/linux-x64/worker"))
+        self.assertFalse(SCRIPT.is_foreign_architecture_path(
+            "extensions/copilot/node_modules/@github/copilot/sdk/prebuilds/linux-arm64/runtime.node"))
+        self.assertFalse(SCRIPT.is_foreign_architecture_path(
+            "node_modules/@github/copilot-sdk-linux-arm64/prebuilds/linux-arm64/copilot-runtime"))
+        self.assertFalse(SCRIPT.is_foreign_architecture_path("bin/unknown-elf"))
+
     def test_native_elf_architecture_is_checked(self):
         self.assertEqual(SCRIPT.AARCH64, 183)
         self.assertEqual(SCRIPT.ELF_MAGIC, b"\x7fELF")
