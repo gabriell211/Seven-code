@@ -77,3 +77,31 @@ jobs:
             ${{ runner.temp }}/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 14
+
+  bionic-node:
+    name: Obtain signed Android ARM64 Bionic Node runtime
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify Termux signing key and download Android Node runtime
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq binutils gnupg
+          python3 .seven/android/fetch-bionic-node.py "$RUNNER_TEMP/seven-bionic" --expected-major 24
+          test -s "$RUNNER_TEMP/seven-bionic/libnode.so"
+          test -s "$RUNNER_TEMP/seven-bionic/android-libs.zip"
+          test -s "$RUNNER_TEMP/seven-bionic/NOTICE-node.txt"
+          readelf -l "$RUNNER_TEMP/seven-bionic/libnode.so" | grep -F '/system/bin/linker64'
+      - name: Pack verified Bionic runtime staging artifact
+        run: |
+          set -euo pipefail
+          tar -C "$RUNNER_TEMP" -czf "$RUNNER_TEMP/SevenCode-Node-Android-Bionic-arm64.tar.gz" seven-bionic
+          sha256sum "$RUNNER_TEMP/SevenCode-Node-Android-Bionic-arm64.tar.gz"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SevenCode-Node-Android-Bionic-arm64
+          path: ${{ runner.temp }}/SevenCode-Node-Android-Bionic-arm64.tar.gz
+          if-no-files-found: error
+          retention-days: 14
