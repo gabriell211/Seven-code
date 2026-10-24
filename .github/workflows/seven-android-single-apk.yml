@@ -5,10 +5,7 @@ on:
     workflows: ["Seven Code Android - convert Code OSS native modules to Bionic"]
     types: [completed]
   # No-op manual dispatch removed: it never assembled an APK or published an artifact.
-  # Repeat the last verified NDK artifacts after workflow-only packaging fixes.
-  push:
-    branches: [main]
-    paths: [".github/workflows/seven-android-single-apk.yml"]
+  # Run only from the exact successful upstream workflow; never reuse fixed run IDs.
 
 permissions:
   contents: read
@@ -17,11 +14,9 @@ permissions:
 jobs:
   standalone:
     if: >-
-      github.event_name == 'workflow_dispatch' ||
-      github.event_name == 'push' ||
-      (github.event.workflow_run.conclusion == 'success' &&
-       github.event.workflow_run.head_branch == 'main' &&
-       github.event.workflow_run.head_repository.full_name == github.repository)
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
     name: Build self-contained Android APK (NOT a release)
     runs-on: ubuntu-24.04
     timeout-minutes: 90
@@ -46,15 +41,15 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq zip unzip binutils
       - name: Download compiled Bionic addons with source provenance
-        if: github.event_name == 'workflow_run' || github.event_name == 'push'
+        if: github.event_name == 'workflow_run'
         uses: actions/download-artifact@v4
         with:
           name: SevenCode-Android-Bionic-core-node-addons
-          run-id: ${{ github.event.workflow_run.id || 40054225003 }}
+          run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ github.token }}
           path: ${{ runner.temp }}/addons
       - name: Extract source run and pin artifacts to exact revision
-        if: github.event_name == 'workflow_run' || github.event_name == 'push'
+        if: github.event_name == 'workflow_run'
         id: source
         run: |
           set -euo pipefail
@@ -72,7 +67,7 @@ jobs:
           test -s "$RUNNER_TEMP/addons/kerberos-libs.zip"
           test -s "$RUNNER_TEMP/addons/kerberos-provenance.json"
       - name: Fetch original compiled Code OSS and signed Bionic Node for same source run
-        if: github.event_name == 'workflow_run' || github.event_name == 'push'
+        if: github.event_name == 'workflow_run'
         uses: actions/download-artifact@v4
         with:
           run-id: ${{ steps.source.outputs.run_id }}
@@ -80,7 +75,7 @@ jobs:
           pattern: SevenCode-*
           path: ${{ runner.temp }}/upstream
       - name: Build reproducible local Code OSS runtime inside Android APK
-        if: github.event_name == 'workflow_run' || github.event_name == 'push'
+        if: github.event_name == 'workflow_run'
         run: |
           set -euo pipefail
           source_sha="${{ steps.source.outputs.source_sha }}"
