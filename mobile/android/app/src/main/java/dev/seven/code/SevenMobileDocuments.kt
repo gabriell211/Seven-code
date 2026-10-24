@@ -38,7 +38,7 @@ internal class SevenMobileDocuments(private val activity: Activity) {
     }
 
     private data class PendingWrite(
-        val path: String, val stage: File, val output: RandomAccessFile,
+        val path: String, val treeUri: String, val stage: File, val output: RandomAccessFile,
         var count: Long = 0
     )
 
@@ -89,7 +89,8 @@ internal class SevenMobileDocuments(private val activity: Activity) {
         return parent to name
     }
 
-    fun beginSelection(requestId: String) {
+    fun beginSelection(requestId: String, initialUri: Uri? = null) {
+        check(writes.isEmpty()) { "Conclua as gravações antes de trocar de pasta." }
         check(choosing == null) { "Já há uma seleção de pasta em andamento." }
         choosing = requestId
         val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
@@ -97,6 +98,10 @@ internal class SevenMobileDocuments(private val activity: Activity) {
                 Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
                 Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION or
                 Intent.FLAG_GRANT_PREFIX_URI_PERMISSION)
+            if (initialUri != null && initialUri.scheme == "content" &&
+                initialUri.authority in LOCAL_AUTHORITIES) {
+                putExtra(android.provider.DocumentsContract.EXTRA_INITIAL_URI, initialUri)
+            }
         }
         try {
             activity.startActivityForResult(intent, PICK_FOLDER)
@@ -114,6 +119,7 @@ internal class SevenMobileDocuments(private val activity: Activity) {
         }
         return try {
             val uri = data.data!!
+            check(writes.isEmpty()) { "Gravações em andamento; mantenha a pasta anterior." }
             check(uri.authority in LOCAL_AUTHORITIES) {
                 "Escolha uma pasta do armazenamento local do Android, não na nuvem."
             }
@@ -221,8 +227,10 @@ internal class SevenMobileDocuments(private val activity: Activity) {
                     check(writes.size < 4 && !writes.containsKey(id)) {
                         "Limite de gravações simultâneas atingido."
                     }
+                    val selected = activity.getSharedPreferences(PREFS, 0)
+                        .getString(KEY_TREE, null) ?: error("Selecione uma pasta antes de gravar.")
                     val stage = File.createTempFile("seven-write-", ".tmp", activity.cacheDir)
-                    writes[id] = PendingWrite(path, stage, RandomAccessFile(stage, "rw"))
+                    writes[id] = PendingWrite(path, selected, stage, RandomAccessFile(stage, "rw"))
                     JSONObject()
                 }
                 "write-chunk" -> {
@@ -231,14 +239,22 @@ internal class SevenMobileDocuments(private val activity: Activity) {
                     check(bytes.size <= MAX_READ_CHUNK && pending.count + bytes.size <= MAX_FILE_SIZE) {
                         "Arquivo excede o tamanho permitido."
                     }
-                    pending.output.write(bytes)
-                    pending.count += bytes.size
-                    JSONObject().put("count", pending.count)
+                    synchronized(pending) {
+                        check(activity.getSharedPreferences(PREFS, 0).getString(KEY_TREE, null) ==
+                            pending.treeUri) { "Pasta alterada durante a gravação." }
+                        pending.output.write(bytes)
+                        pending.count += bytes.size
+                        JSONObject().put("count", pending.count)
+                    }
                 }
                 "write-commit" -> {
                     val pending = writes.remove(id) ?: error("Gravação não iniciada.")
                     try {
-                        pending.output.close()
+                        synchronized(pending) {
+                            pending.output.close()
+                        }
+                        check(activity.getSharedPreferences(PREFS, 0).getString(KEY_TREE, null) ==
+                            pending.treeUri) { "Pasta alterada durante a gravação." }
                         val (parent, name) = parentFor(pending.path)
                         val existing = parent.findFile(name)
                         val dest = existing ?: parent.createFile("application/octet-stream", name)
