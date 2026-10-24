@@ -27,6 +27,7 @@ import dev.seven.code.terminal.SevenPty
 import org.json.JSONObject
 import java.io.IOException
 import java.io.ByteArrayInputStream
+import kotlin.concurrent.thread
 
 /** External browser receives only top-level HTTPS URLs, never scripts or file URLs. */
 internal fun safeExternalHttpsTarget(uri: Uri): Boolean =
@@ -51,10 +52,12 @@ class MainActivity : Activity() {
     private val popupWindows = mutableSetOf<WebView>()
     private var pendingExternalConsent = false
     private var localServer: SevenLocalCodeOssServer? = null
+    private lateinit var mobileDocuments: SevenMobileDocuments
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         localServer = SevenLocalCodeOssServer(this)
+        mobileDocuments = SevenMobileDocuments(this)
         // A complete Android-compatible Code OSS bundle boots directly into
         // the upstream workbench, without asking the user for an HTTPS URL.
         if (localServer?.hasBundle() == true) {
@@ -131,6 +134,7 @@ class MainActivity : Activity() {
         workbenchActive = false
         trustedOrigin = ""
         closeWorkbenchTerminals()
+        mobileDocuments.dispose()
         closePopupWindows()
         if (::webView.isInitialized) {
             webView.stopLoading()
@@ -182,6 +186,7 @@ class MainActivity : Activity() {
         // Stop authorization for the old web document before replacing its WebView.
         workbenchActive = false
         closeWorkbenchTerminals()
+        mobileDocuments.dispose()
         closePopupWindows()
         if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
             setContentView(TextView(this).apply {
@@ -404,6 +409,10 @@ class MainActivity : Activity() {
         if (!workbenchActive) return
         try {
             val data = JSONObject(raw)
+            if (data.optString("type") == "fs-request") {
+                handleFileRequest(data)
+                return
+            }
             if (data.optString("type") == "ai-propose") {
                 proposeAiCommand(data)
                 return
@@ -486,6 +495,39 @@ class MainActivity : Activity() {
             }
         } catch (error: Exception) {
             // A malformed web message must not crash the Android workbench.
+        }
+    }
+
+    private fun handleFileRequest(data: JSONObject) {
+        val requestId = data.optString("requestId")
+        if (!requestId.matches(Regex("[A-Za-z0-9_-]{1,64}"))) return
+        if (data.optString("op") == "select") {
+            try {
+                mobileDocuments.beginSelection(requestId)
+            } catch (e: Exception) {
+                sendPayload(JSONObject().put("type", "fs-result")
+                    .put("requestId", requestId).put("ok", false)
+                    .put("error", e.message ?: "Não foi possível selecionar a pasta."))
+            }
+            return
+        }
+        // SAF providers may perform slow I/O. Keep them off Android's UI thread.
+        val generation = terminalGeneration
+        thread(name = "seven-mobile-documents", isDaemon = true) {
+            val reply = mobileDocuments.process(data)
+            runOnUiThread {
+                if (workbenchActive && generation == terminalGeneration && !isFinishing && !isDestroyed) {
+                    sendPayload(reply)
+                }
+            }
+        }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == SevenMobileDocuments.PICK_FOLDER) {
+            val result = mobileDocuments.finishSelection(resultCode, data)
+            if (result != null && workbenchActive) sendPayload(result)
         }
     }
 
@@ -581,6 +623,7 @@ class MainActivity : Activity() {
         aiRunner?.cancel()
         aiRunner = null
         localServer?.stop()
+        mobileDocuments.dispose()
         if (::webView.isInitialized) webView.destroy()
         super.onDestroy()
     }
