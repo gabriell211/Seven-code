@@ -4,7 +4,7 @@
  * The web gulp target exports the embedder API, NOT the server-side HTML shell.
  * Rendering the editor therefore does not require running Node on the phone.
  */
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 const buildRoot = resolve(process.argv[2] ?? '../vscode-web');
@@ -74,10 +74,22 @@ for (const dir of ['assets', 'l10n']) {
   if (existsSync(source)) cpSync(source, join(copilotDest, dir), { recursive: true });
 }
 const copilotDist = join(copilotSource, 'dist');
-for (const filename of ['suggestionsPanelWebview.js']) {
-  if (existsSync(join(copilotDist, filename))) {
-    cpSync(join(copilotDist, filename), join(copilotDest, 'dist', filename));
+// The web worker reads grammars, tokenizers and its child web workers by URI.
+// Shipping web.js alone silently breaks language-aware Chat / inline edits.
+const childWebWorkers = new Set([
+  'suggestionsPanelWebview.js', 'webview.js', 'worker2.js',
+  'tikTokenizerWorker.js', 'diffWorker.js',
+]);
+for (const filename of readdirSync(copilotDist)) {
+  const source = join(copilotDist, filename);
+  if (!statSync(source).isFile()) continue;
+  if (childWebWorkers.has(filename) || /\\.(?:wasm|json|bpe|tiktoken)$/.test(filename)) {
+    cpSync(source, join(copilotDest, 'dist', filename));
   }
+}
+for (const notice of ['ThirdPartyNotices.txt', 'telemetry.json']) {
+  const file = join(copilotSource, notice);
+  if (existsSync(file)) cpSync(file, join(copilotDest, notice));
 }
 for (const filename of ['package.nls.json']) {
   if (existsSync(join(copilotSource, filename))) {
