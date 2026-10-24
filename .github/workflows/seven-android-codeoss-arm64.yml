@@ -6,7 +6,9 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/seven-android-codeoss-arm64.yml"
-      - ".seven/android/**"
+      - ".seven/android/audit-codeoss-abi.py"
+      - ".seven/android/fetch-bionic-node.py"
+      - ".seven/android/termux-repository-key.asc"
       - "build/gulpfile.reh.ts"
       - "src/vs/workbench/browser/sevenMobileTerminalBridge.ts"
       - "src/vs/workbench/contrib/terminal/browser/sevenAndroidTerminalProcess.ts"
