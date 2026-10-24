@@ -1,0 +1,207 @@
+package dev.seven.code
+
+import android.content.Context
+import android.os.Handler
+import android.os.Looper
+import android.os.StatFs
+import java.io.File
+import java.io.FileInputStream
+import java.net.InetAddress
+import java.net.InetSocketAddress
+import java.net.ServerSocket
+import java.net.Socket
+import java.security.MessageDigest
+import java.security.SecureRandom
+import java.util.zip.ZipInputStream
+import kotlin.concurrent.thread
+
+/**
+ * Opt-in Android self-hosted Code OSS runtime. This path is enabled ONLY if the
+ * APK actually contains an Android-compatible server ZIP, SHA-256 manifest and
+ * a Bionic ARM64 Node executable packaged as libnode.so.
+ *
+ * Never download an unknown binary or silently substitute a remote server.
+ * The production Code OSS extension host must be built for Android/Bionic.
+ */
+internal class SevenLocalCodeOssServer(private val context: Context) {
+    companion object {
+        private const val ARCHIVE = "seven-local/server.zip"
+        private const val DIGEST = "seven-local/server.sha256"
+        private const val MAX_UNPACKED_BYTES = 2_000_000_000L
+        private const val MAX_ARCHIVE_BYTES = 500_000_000L
+        private const val MAX_FILE_COUNT = 90_000
+    }
+
+    private val root = File(context.filesDir, "seven-code-oss-local")
+    private val node = File(context.applicationInfo.nativeLibraryDir, "libnode.so")
+    private val handler = Handler(Looper.getMainLooper())
+    @Volatile private var process: Process? = null
+    @Volatile private var stopped = false
+    @Volatile var localOrigin: String? = null
+        private set
+
+    /** Presence is not proof of a runnable server. Integrity/startup checks follow. */
+    fun hasBundle(): Boolean = try {
+        context.assets.open(ARCHIVE).use { }
+        true
+    } catch (_: java.io.IOException) {
+        false
+    }
+
+    fun start(onComplete: (Result<String>) -> Unit) {
+        stopped = false
+        thread(name = "seven-code-oss-bootstrap", isDaemon = true) {
+            val result = runCatching { startVerifiedLocalServer() }
+            handler.post {
+                if (!stopped) onComplete(result)
+            }
+        }
+    }
+
+    private fun startVerifiedLocalServer(): String {
+        check(hasBundle()) { "Pacote Code OSS não está incluído neste APK." }
+        check(android.os.Build.SUPPORTED_ABIS.contains("arm64-v8a")) {
+            "O runtime local requer Android ARM64; este dispositivo usa outra arquitetura."
+        }
+        check(node.isFile && node.canExecute()) {
+            "Node.js Bionic ARM64 não está incluído no APK."
+        }
+
+        val expected = context.assets.open(DIGEST).bufferedReader().use { it.readText().trim() }
+        check(expected.matches(Regex("[a-fA-F0-9]{64}"))) {
+            "SHA-256 do pacote Code OSS está ausente ou inválido."
+        }
+        val manifest = File(root, "verified.sha256")
+        val serverDir = File(root, "server")
+        if (!(manifest.isFile && manifest.readText().trim().equals(expected, true)
+                    && File(serverDir, "out/server-main.js").isFile)) {
+            val staging = File(root, "staging")
+            staging.deleteRecursively()
+            check(staging.mkdirs()) { "Não foi possível preparar arquivos locais." }
+            try {
+                val digest = MessageDigest.getInstance("SHA-256")
+                var archiveSize = 0L
+                // Materialize the archive and hash the actual installed bytes before extraction.
+                val zipFile = File(root, "incoming.zip")
+                context.assets.open(ARCHIVE).use { input ->
+                    zipFile.outputStream().use { output ->
+                        val buffer = ByteArray(64 * 1024)
+                        while (true) {
+                            val n = input.read(buffer)
+                            if (n < 0) break
+                            archiveSize += n
+                            check(archiveSize <= MAX_ARCHIVE_BYTES) { "Arquivo Code OSS grande demais." }
+                            digest.update(buffer, 0, n)
+                            output.write(buffer, 0, n)
+                        }
+                    }
+                }
+                val actual = digest.digest().joinToString("") { "%02x".format(it) }
+                check(actual.equals(expected, true)) { "Pacote Code OSS falhou no SHA-256." }
+                check(StatFs(context.filesDir.absolutePath).availableBytes > 1_000_000_000L) {
+                    "Espaço insuficiente para instalar o Code OSS local."
+                }
+                FileInputStream(zipFile).use { extractVerifiedZip(it, staging) }
+                check(File(staging, "out/server-main.js").isFile) {
+                    "Pacote não contém o servidor original do Code OSS."
+                }
+                serverDir.deleteRecursively()
+                check(staging.renameTo(serverDir)) { "Falha ao ativar o servidor local." }
+                manifest.writeText(expected)
+                zipFile.delete()
+            } catch (error: Exception) {
+                staging.deleteRecursively()
+                File(root, "incoming.zip").delete()
+                throw error
+            }
+        }
+
+        val randomToken = ByteArray(32)
+        SecureRandom().nextBytes(randomToken)
+        val token = randomToken.joinToString("") { "%02x".format(it) }
+        val port = ServerSocket(0, 1, InetAddress.getByName("127.0.0.1")).use { it.localPort }
+        val url = "http://127.0.0.1:$port/?tkn=$token"
+        val log = File(root, "server.log")
+
+        // The library is packaged as a directly executable ELF (not a dlopen-only
+        // libnode). It must be built for Android's linker and ship its dependencies.
+        val command = listOf(
+            node.absolutePath, File(serverDir, "out/server-main.js").absolutePath,
+            "--host", "127.0.0.1", "--port", port.toString(),
+            "--connection-token", token,
+            "--server-data-dir", File(root, "data").absolutePath,
+            "--user-data-dir", File(root, "user").absolutePath,
+            "--accept-server-license-terms", "--telemetry-level", "off"
+        )
+        val env = ProcessBuilder(command)
+            .directory(serverDir)
+            .redirectErrorStream(true)
+            .redirectOutput(log)
+        env.environment().apply {
+            put("HOME", context.filesDir.absolutePath)
+            put("TMPDIR", context.cacheDir.absolutePath)
+            put("XDG_CONFIG_HOME", File(root, "config").absolutePath)
+            put("XDG_CACHE_HOME", File(root, "cache").absolutePath)
+            put("LD_LIBRARY_PATH", context.applicationInfo.nativeLibraryDir)
+        }
+        val started = env.start()
+        process = started
+        val deadline = System.nanoTime() + 90_000_000_000L
+        while (!stopped && System.nanoTime() < deadline && started.isAlive) {
+            try {
+                Socket().use { socket ->
+                    socket.connect(InetSocketAddress("127.0.0.1", port), 250)
+                }
+                localOrigin = "http://127.0.0.1:$port"
+                return url
+            } catch (_: java.io.IOException) {
+                Thread.sleep(150)
+            }
+        }
+        stop()
+        error("O servidor Code OSS local não iniciou. Consulte os logs do aplicativo.")
+    }
+
+    private fun extractVerifiedZip(source: FileInputStream, destination: File) {
+        val base = destination.canonicalPath + File.separator
+        var total = 0L
+        var count = 0
+        ZipInputStream(source).use { zip ->
+            while (true) {
+                val entry = zip.nextEntry ?: break
+                count++
+                check(count <= MAX_FILE_COUNT) { "Pacote Code OSS tem arquivos demais." }
+                check(!entry.name.contains('\\') && !entry.name.startsWith('/')) {
+                    "Caminho inválido no pacote Code OSS."
+                }
+                val target = File(destination, entry.name)
+                check(target.canonicalPath.startsWith(base)) { "Caminho de extração não permitido." }
+                if (entry.isDirectory) {
+                    check(target.isDirectory || target.mkdirs()) { "Falha ao criar diretório." }
+                } else {
+                    check(target.parentFile?.isDirectory == true || target.parentFile?.mkdirs() == true) {
+                        "Falha ao criar diretórios do servidor."
+                    }
+                    target.outputStream().use { output ->
+                        val buffer = ByteArray(32 * 1024)
+                        while (true) {
+                            val n = zip.read(buffer)
+                            if (n < 0) break
+                            total += n
+                            check(total <= MAX_UNPACKED_BYTES) { "Pacote Code OSS excede tamanho seguro." }
+                            output.write(buffer, 0, n)
+                        }
+                    }
+                }
+                zip.closeEntry()
+            }
+        }
+    }
+
+    fun stop() {
+        stopped = true
+        localOrigin = null
+        process?.destroy()
+        process = null
+    }
+}
