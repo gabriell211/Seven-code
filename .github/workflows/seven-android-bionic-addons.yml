@@ -24,6 +24,8 @@ jobs:
       NODE_OPTIONS: --max-old-space-size=4096
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
@@ -80,6 +82,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/native-bionic"
+          printf '%s\n' '${{ github.event.workflow_run.id }}' > "$RUNNER_TEMP/native-bionic/UPSTREAM_RUN_ID.txt"
+          printf '%s\n' '${{ github.event.workflow_run.head_sha }}' > "$RUNNER_TEMP/native-bionic/SOURCE_SHA.txt"
           cp "$CODEOSS_PATH/node_modules/node-pty/build/Release/pty.node" "$RUNNER_TEMP/native-bionic/pty.node"
           cp "$CODEOSS_PATH/node_modules/@parcel/watcher/build/Release/watcher.node" "$RUNNER_TEMP/native-bionic/watcher.node"
           cp "$CODEOSS_PATH/node_modules/@vscode/sqlite3/build/Release/vscode-sqlite3.node" "$RUNNER_TEMP/native-bionic/vscode-sqlite3.node"
