@@ -99,6 +99,13 @@ jobs:
           cp "$CODEOSS_PATH/node_modules/@vscode/sqlite3/build/Release/vscode-sqlite3.node" "$RUNNER_TEMP/native-bionic/vscode-sqlite3.node"
           cp "$CODEOSS_PATH/node_modules/@vscode/spdlog/build/Release/spdlog.node" "$RUNNER_TEMP/native-bionic/spdlog.node"
           cp "$CODEOSS_PATH/node_modules/@vscode/native-watchdog/build/Release/watchdog.node" "$RUNNER_TEMP/native-bionic/watchdog.node"
+          cp "$CODEOSS_PATH/node_modules/kerberos/build/Release/kerberos.node" "$RUNNER_TEMP/native-bionic/kerberos.node"
+          cp "$BIONIC_PATH/kerberos/provenance.json" "$RUNNER_TEMP/native-bionic/kerberos-provenance.json"
+          (
+            cd "$BIONIC_PATH/kerberos/libs"
+            zip -q -9 "$RUNNER_TEMP/native-bionic/kerberos-libs.zip" ./*.so*
+          )
+          test -s "$RUNNER_TEMP/native-bionic/kerberos-libs.zip"
           cp "$RUNNER_TEMP/staging/ANDROID-BIONIC-ABI-REPORT.txt" "$RUNNER_TEMP/native-bionic/ABI-REPORT.txt"
           sha256sum "$RUNNER_TEMP/native-bionic/"*.node
       - uses: actions/upload-artifact@v4
