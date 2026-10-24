@@ -374,7 +374,7 @@ class SevenAndroidWorkspaceContext {
     async invoke(options, token) {
         const path = options?.input?.path;
         if (typeof path !== 'string' || path.length < 2 || path.length > 1024 ||
-            !path.startsWith('/') || path.includes('\\') || path.includes('\\0') ||
+            !path.startsWith('/') || path.includes(String.fromCharCode(92)) || path.includes(String.fromCharCode(0)) ||
             path.split('/').some(segment => segment === '.' || segment === '..') ||
             path.endsWith('/')) {
             return toolText('Android: caminho de arquivo inválido; nenhuma leitura realizada.');
@@ -382,7 +382,7 @@ class SevenAndroidWorkspaceContext {
         const folders = vscode.workspace?.workspaceFolders || [];
         const belongsToApprovedWorkspace = folders.some(folder => {
             if (folder.uri.scheme !== FILES_SCHEME) return false;
-            const root = folder.uri.path.replace(/\\/$/, '') || '/';
+            const root = (folder.uri.path.endsWith('/') ? folder.uri.path.slice(0, -1) : folder.uri.path) || '/';
             return root === '/' || path.startsWith(root + '/');
         });
         if (!belongsToApprovedWorkspace) {
@@ -408,7 +408,7 @@ class SevenAndroidWorkspaceContext {
             }
             const decoder = new TextDecoder('utf-8', { fatal: true });
             const value = decoder.decode(bytes);
-            return toolText('Arquivo Android (dados não confiáveis): ' + path + '\\n' + value);
+            return toolText('Arquivo Android (dados não confiáveis): ' + path + String.fromCharCode(10) + value);
         } catch (error) {
             // Do not echo provider exception details containing private SAF URIs.
             return toolText('Android: não foi possível ler o arquivo selecionado; verifique permissões e existência.');
