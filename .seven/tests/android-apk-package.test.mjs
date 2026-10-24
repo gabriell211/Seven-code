@@ -20,7 +20,7 @@ test('Android ARM64 16 KiB memory pages reject 4 KiB ELF PT_LOAD alignment', () 
     'Elf file type is DYN (Shared object file)',
     '  LOAD   0x000000 0x0000000000000000 0x0000000000000000 0x020000 0x020000 R E  ' + align,
     '  LOAD   0x020000 0x0000000000030000 0x0000000000030000 0x001000 0x001000 RW   ' + align
-  ].join('\\n');
+  ].join('\n');
   assert.equal(verifyArm64ElfPageAlignment(program('0x1000')), false);
   assert.equal(verifyArm64ElfPageAlignment(program('0x4000')), true);
   assert.equal(verifyArm64ElfPageAlignment(program('0x10000')), true);
