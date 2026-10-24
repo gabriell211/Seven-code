@@ -74,6 +74,7 @@ struct SevenCodeWebWorkbench: UIViewRepresentable {
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
         let view = WKWebView(frame: .zero, configuration: configuration)
         view.navigationDelegate = context.coordinator
+        view.uiDelegate = context.coordinator
         view.allowsBackForwardNavigationGestures = false
         view.load(URLRequest(url: url, cachePolicy: .useProtocolCachePolicy))
         return view
@@ -81,7 +82,7 @@ struct SevenCodeWebWorkbench: UIViewRepresentable {
 
     func updateUIView(_ view: WKWebView, context: Context) {}
 
-    final class Coordinator: NSObject, WKNavigationDelegate {
+    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
         private let allowedScheme: String
         private let allowedHost: String
         private let allowedPort: Int?
@@ -92,6 +93,40 @@ struct SevenCodeWebWorkbench: UIViewRepresentable {
             self.allowedPort = allowedURL.port
         }
 
+        private func trustedServer(_ url: URL) -> Bool {
+            url.scheme == allowedScheme && url.host == allowedHost &&
+                (url.port ?? 443) == (allowedPort ?? 443) &&
+                url.user == nil && url.password == nil
+        }
+
+        private func externalHTTPS(_ url: URL) -> Bool {
+            url.scheme?.lowercased() == "https" && url.host?.isEmpty == false &&
+                url.user == nil && url.password == nil &&
+                !(url.host?.contains("..") ?? true)
+        }
+
+        private func openOutsideWorkbench(_ url: URL, requiresConsent: Bool, webView: WKWebView) {
+            guard externalHTTPS(url) else { return }
+            if !requiresConsent {
+                UIApplication.shared.open(url)
+                return
+            }
+            // OAuth windows may open after an asynchronous extension callback.
+            // Ask before launching an external app if there is no direct link tap.
+            guard let controller = webView.window?.rootViewController,
+                  controller.presentedViewController == nil else { return }
+            let alert = UIAlertController(
+                title: "Abrir autenticação no navegador?",
+                message: "O editor quer abrir \(url.host ?? "site externo"). Continue somente se iniciou essa ação.",
+                preferredStyle: .alert
+            )
+            alert.addAction(UIAlertAction(title: "Cancelar", style: .cancel))
+            alert.addAction(UIAlertAction(title: "Abrir", style: .default) { _ in
+                UIApplication.shared.open(url)
+            })
+            controller.present(alert, animated: true)
+        }
+
         func webView(_ webView: WKWebView,
                      decidePolicyFor navigationAction: WKNavigationAction,
                      decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
@@ -99,14 +134,37 @@ struct SevenCodeWebWorkbench: UIViewRepresentable {
                 decisionHandler(.allow)
                 return
             }
-            let next = navigationAction.request.url
-            if next?.scheme == allowedScheme && next?.host == allowedHost &&
-                (next?.port ?? 443) == (allowedPort ?? 443) &&
-                next?.user == nil && next?.password == nil {
+            if let url = navigationAction.request.url, trustedServer(url) {
                 decisionHandler(.allow)
             } else {
+                if let url = navigationAction.request.url, externalHTTPS(url) {
+                    openOutsideWorkbench(
+                        url,
+                        requiresConsent: navigationAction.navigationType != .linkActivated,
+                        webView: webView
+                    )
+                }
                 decisionHandler(.cancel)
             }
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            createWebViewWith configuration: WKWebViewConfiguration,
+            for navigationAction: WKNavigationAction,
+            windowFeatures: WKWindowFeatures
+        ) -> WKWebView? {
+            // The original Code OSS env.openExternal may use window.open().
+            // Never create a privileged child WebView for third-party OAuth.
+            if navigationAction.targetFrame == nil,
+               let url = navigationAction.request.url, externalHTTPS(url) {
+                openOutsideWorkbench(
+                    url,
+                    requiresConsent: navigationAction.navigationType != .linkActivated,
+                    webView: webView
+                )
+            }
+            return nil
         }
     }
 }
