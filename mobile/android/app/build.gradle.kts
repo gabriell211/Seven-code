@@ -16,6 +16,14 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    // Android's nativeLibraryDir must contain an executable Bionic
+    // libnode.so file for ProcessBuilder; unextracted APK ELF is unusable.
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false

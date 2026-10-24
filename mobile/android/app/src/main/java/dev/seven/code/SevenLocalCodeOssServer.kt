@@ -6,6 +6,10 @@ import android.os.Looper
 import android.os.StatFs
 import java.io.File
 import java.io.FileInputStream
+import java.io.RandomAccessFile
+import java.net.HttpURLConnection
+import java.net.URL
+import org.json.JSONObject
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.ServerSocket
@@ -122,6 +126,10 @@ internal class SevenLocalCodeOssServer(private val context: Context) {
         val port = ServerSocket(0, 1, InetAddress.getByName("127.0.0.1")).use { it.localPort }
         val url = "http://127.0.0.1:$port/?tkn=$token"
         val log = File(root, "server.log")
+        val expectedCommit = JSONObject(File(serverDir, "product.json").readText()).getString("commit")
+        check(expectedCommit.matches(Regex("[a-f0-9]{40}"))) {
+            "O servidor Code OSS local está sem revisão verificável."
+        }
 
         // The library is packaged as a directly executable ELF (not a dlopen-only
         // libnode). It must be built for Android's linker and ship its dependencies.
@@ -148,18 +156,69 @@ internal class SevenLocalCodeOssServer(private val context: Context) {
         process = started
         val deadline = System.nanoTime() + 90_000_000_000L
         while (!stopped && System.nanoTime() < deadline && started.isAlive) {
-            try {
-                Socket().use { socket ->
-                    socket.connect(InetSocketAddress("127.0.0.1", port), 250)
-                }
+            // TCP alone is NOT proof: another process may bind the ephemeral
+            // port between reservation and the Code OSS Node spawn.
+            if (hasServerReadinessBanner(log, port) &&
+                verifyAuthenticatedWorkbench(port, token, expectedCommit)) {
                 localOrigin = "http://127.0.0.1:$port"
                 return url
-            } catch (_: java.io.IOException) {
-                Thread.sleep(150)
             }
+            Thread.sleep(200)
         }
         stop()
         error("O servidor Code OSS local não iniciou. Consulte os logs do aplicativo.")
+    }
+
+    private fun hasServerReadinessBanner(log: File, port: Int): Boolean {
+        if (!log.isFile) return false
+        return try {
+            RandomAccessFile(log, "r").use { handle ->
+                val length = minOf(handle.length(), 16_384L).toInt()
+                if (length == 0) return false
+                handle.seek(handle.length() - length)
+                val bytes = ByteArray(length)
+                handle.readFully(bytes)
+                String(bytes, Charsets.UTF_8)
+                    .contains("Web UI available at http://localhost:$port")
+            }
+        } catch (_: java.io.IOException) {
+            false
+        }
+    }
+
+    private fun readLimited(url: URL, cookie: String? = null): String? {
+        val connection = url.openConnection() as HttpURLConnection
+        return try {
+            connection.instanceFollowRedirects = false
+            connection.connectTimeout = 700
+            connection.readTimeout = 1500
+            if (cookie != null) connection.setRequestProperty("Cookie", cookie)
+            if (connection.responseCode != 200) return null
+            connection.inputStream.bufferedReader(Charsets.UTF_8).use { reader ->
+                val text = StringBuilder()
+                val buffer = CharArray(4096)
+                while (text.length < 262_144) {
+                    val n = reader.read(buffer, 0, minOf(buffer.size, 262_144 - text.length))
+                    if (n < 0) break
+                    text.append(buffer, 0, n)
+                }
+                text.toString()
+            }
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    private fun verifyAuthenticatedWorkbench(port: Int, token: String, commit: String): Boolean {
+        return try {
+            val origin = "http://127.0.0.1:$port"
+            val version = readLimited(URL("$origin/version"))
+            if (version?.trim() != commit) return false
+            val page = readLimited(URL("$origin/"), "vscode-tkn=$token")
+            page?.contains("vscode-workbench-web-configuration") == true
+        } catch (_: Exception) {
+            false
+        }
     }
 
     private fun extractVerifiedZip(source: FileInputStream, destination: File) {

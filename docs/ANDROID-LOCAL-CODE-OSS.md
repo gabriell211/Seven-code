@@ -47,3 +47,16 @@ Do not upload a purported standalone release until:
 
 See also `docs/RELEASE-QUALIFICATION.md`. Microsoft-hosted official VS Code
 Server binaries are **not** repackaged in this fork.
+
+
+## Proteções do servidor localhost
+
+- O Android mantém HTTP público **bloqueado**. Só `127.0.0.1`
+  pode usar HTTP, via `network_security_config.xml`.
+- Os binários `jniLibs` são extraídos para dar ao Node Bionic um caminho
+  ELF executável em `nativeLibraryDir`.
+- Uma conexão TCP não basta para declarar o editor pronto: o app espera
+  a mensagem de inicialização do **seu próprio processo Node**,
+  compara `/version` com o commit do servidor empacotado e carrega
+  o workbench com o token de sessão exigindo configuração real no HTML.
+- Isso ainda não substitui o build e o E2E Android ARM64 do runtime completo.
