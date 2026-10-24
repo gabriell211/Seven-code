@@ -49,6 +49,7 @@ class MainActivity : Activity() {
     private var showingConnectionError = false
     private var workbenchActive = false
     private val popupWindows = mutableSetOf<WebView>()
+    private var pendingExternalConsent = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -142,7 +143,10 @@ class MainActivity : Activity() {
             domStorageEnabled = true
             allowFileAccess = false
             allowContentAccess = false
-            javaScriptCanOpenWindowsAutomatically = false
+            // env.openExternal can call window.open after an async OAuth step,
+            // when Chromium no longer reports a gesture. The host handles
+            // every popup separately, with HTTPS validation and native consent.
+            javaScriptCanOpenWindowsAutomatically = true
             setSupportMultipleWindows(true)
             mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
             safeBrowsingEnabled = true
@@ -202,7 +206,7 @@ class MainActivity : Activity() {
                 // Code OSS env.openExternal frequently uses window.open, not
                 // a main-frame navigation. Never load an OAuth popup inside
                 // the privileged workbench WebView.
-                if (!workbenchActive || view !== webView || !isUserGesture ||
+                if (!workbenchActive || view !== webView || popupWindows.isNotEmpty() ||
                     isFinishing || isDestroyed) return false
                 val popup = WebView(this@MainActivity)
                 popup.settings.apply {
@@ -211,22 +215,28 @@ class MainActivity : Activity() {
                     allowContentAccess = false
                     mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
                 }
+                var handled = false
+                fun forwardPopupUrl(uri: Uri) {
+                    if (handled) return
+                    handled = true
+                    if (safeExternalHttpsTarget(uri)) {
+                        openInSystemBrowser(uri, requireConsent = !isUserGesture)
+                    }
+                    destroyPopup(popup)
+                }
                 popup.webViewClient = object : WebViewClient() {
                     override fun shouldOverrideUrlLoading(
                         child: WebView, request: WebResourceRequest
                     ): Boolean {
-                        if (request.isForMainFrame && safeExternalHttpsTarget(request.url)) {
-                            openInSystemBrowser(request.url)
+                        if (!request.isForMainFrame || request.url.toString() == "about:blank") {
+                            return false
                         }
-                        destroyPopup(popup)
+                        forwardPopupUrl(request.url)
                         return true
                     }
                     override fun onPageStarted(child: WebView, url: String, favicon: Bitmap?) {
                         val uri = Uri.parse(url)
-                        if (safeExternalHttpsTarget(uri)) {
-                            openInSystemBrowser(uri)
-                            destroyPopup(popup)
-                        }
+                        if (safeExternalHttpsTarget(uri)) forwardPopupUrl(uri)
                     }
                 }
                 popupWindows.add(popup)
@@ -264,7 +274,27 @@ class MainActivity : Activity() {
         webView.loadUrl(parsed.second)
     }
 
-    private fun openInSystemBrowser(uri: Uri) {
+    private fun openInSystemBrowser(uri: Uri, requireConsent: Boolean = false) {
+        if (!safeExternalHttpsTarget(uri)) return
+        if (requireConsent) {
+            // Third-party iframes can attempt to open a popup. Without a
+            // genuine gesture, never launch another app silently.
+            if (pendingExternalConsent || !workbenchActive || isFinishing || isDestroyed) return
+            pendingExternalConsent = true
+            AlertDialog.Builder(this)
+                .setTitle("Abrir autenticação no navegador?")
+                .setMessage("O editor quer abrir " + uri.host +
+                    " no navegador do sistema. Autorize somente se iniciou essa ação.")
+                .setPositiveButton("Abrir") { _, _ -> launchExternalBrowser(uri) }
+                .setNegativeButton("Cancelar", null)
+                .setOnDismissListener { pendingExternalConsent = false }
+                .show()
+            return
+        }
+        launchExternalBrowser(uri)
+    }
+
+    private fun launchExternalBrowser(uri: Uri) {
         if (!safeExternalHttpsTarget(uri)) return
         try {
             startActivity(
