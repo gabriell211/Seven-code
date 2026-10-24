@@ -117,6 +117,58 @@ jobs:
             "$root/node_modules/@github/copilot-sdk-linux-arm64/prebuilds/linux-arm64/runtime.node"
           "$loader" --verify "$root/node_modules/@github/copilot-sdk-linux-arm64/prebuilds/linux-arm64/copilot-runtime"
           echo "GNU AArch64 original native addons loaded. This is NOT proof of Android compatibility or Copilot OAuth."
+      - name: Boot the ORIGINAL local Code OSS web server with GNU ARM64 Node and verify auth
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/compiled/vscode-reh-web-linux-arm64"
+          loader="$RUNNER_TEMP/gnu-runtime/ld-linux-aarch64.so.1"
+          node="$RUNNER_TEMP/gnu-runtime/node"
+          libs="$RUNNER_TEMP/gnu-runtime/lib"
+          test -s "$root/out/server-main.js"
+          test -s "$root/out/vs/code/browser/workbench/workbench.js"
+          mkdir -p "$RUNNER_TEMP/gnu-runtime/home" "$RUNNER_TEMP/gnu-runtime/user" "$RUNNER_TEMP/gnu-runtime/data"
+          port=$(python3 -c "import socket;s=socket.socket();s.bind(('127.0.0.1',0));print(s.getsockname()[1]);s.close()")
+          token=$(python3 -c "import secrets;print(secrets.token_hex(32))")
+          export HOME="$RUNNER_TEMP/gnu-runtime/home"
+          export TMPDIR="$RUNNER_TEMP"
+          export LD_LIBRARY_PATH="$libs"
+          log="$RUNNER_TEMP/gnu-codeoss-server.log"
+          "$loader" --library-path "$libs" "$node" "$root/out/server-main.js" \
+            --host 127.0.0.1 --port "$port" --connection-token "$token" \
+            --server-data-dir "$RUNNER_TEMP/gnu-runtime/data" \
+            --user-data-dir "$RUNNER_TEMP/gnu-runtime/user" \
+            --accept-server-license-terms --telemetry-level off >"$log" 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true; wait "$server_pid" 2>/dev/null || true' EXIT
+          commit=${{ steps.source.outputs.source_sha }}
+          ready=0
+          for _ in $(seq 1 120); do
+            if ! kill -0 "$server_pid" 2>/dev/null; then
+              echo "::error::Original GNU Code OSS server exited during startup."
+              cat "$log"
+              exit 1
+            fi
+            version=$(curl -fsS --max-time 2 "http://127.0.0.1:$port/version" 2>/dev/null || true)
+            if [[ "$version" == "$commit" ]]; then
+              ready=1
+              break
+            fi
+            sleep 0.25
+          done
+          if [[ "$ready" -ne 1 ]]; then
+            echo "::error::Original GNU ARM64 Code OSS failed authenticated server startup."
+            tail -100 "$log"
+            exit 1
+          fi
+          curl -fsS --max-time 10 -H "Cookie: vscode-tkn=$token" \
+            "http://127.0.0.1:$port/" >"$RUNNER_TEMP/gnu-workbench.html"
+          grep -q 'vscode-workbench-web-configuration' "$RUNNER_TEMP/gnu-workbench.html" || {
+            echo "::error::Code OSS did not serve a real authenticated workbench."
+            tail -100 "$log"
+            exit 1
+          }
+          echo "ORIGINAL Code OSS ARM64 workbench and authenticated /version loaded under GNU runtime."
+          echo "RESEARCH ONLY: no Android kernel, physical device or real Copilot OAuth was tested."
       - name: Keep research evidence separate from any APK/release
         if: success()
         uses: actions/upload-artifact@v4
