@@ -1,0 +1,94 @@
+name: Seven Code Android - publish verified standalone release
+
+on:
+  workflow_run:
+    workflows: ["Seven Code Android - assemble single self-contained APK"]
+    types: [completed]
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  publish-standalone:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    name: Publish ONE complete APK only after real device and Copilot E2E
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Install APK ELF validation tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq binutils unzip
+      - name: Download EXACT qualified standalone APK artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: SevenCode-Android-arm64-self-contained-test-APK
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+          path: release-assets
+      - name: Refuse stale, incomplete, unsigned or split APK releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_EVENT_NAME" = workflow_run
+          source_sha="${{ github.event.workflow_run.head_sha }}"
+          test "$(git rev-parse HEAD)" = "$source_sha"
+          main_sha=$(gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq '.commit.sha')
+          test "$main_sha" = "$source_sha" || {
+            echo "::error::Main advanced since Code OSS was compiled; refusing stale release."
+            exit 1
+          }
+          node .seven/require-single-apk-release.mjs release-assets
+          cd release-assets
+          sha256sum --check SHA256SUMS.txt
+          apk=$(find . -maxdepth 1 -name '*.apk' -type f -print -quit)
+          test -n "$apk"
+          # Android Gradle assembleDebug signs with the public Android Debug key.
+          # That is NOT a final distributable application signature.
+          if [[ "$apk" == *debug*.apk ]]; then
+            echo "::error::A debug-signed APK cannot be published as a final release."
+            exit 1
+          fi
+          if ! command -v apksigner >/dev/null 2>&1; then
+            echo "::error::apksigner is required to verify production APK signatures."
+            exit 1
+          fi
+          apksigner verify --verbose "$apk"
+          cert=$(apksigner verify --print-certs "$apk")
+          if echo "$cert" | grep -qi 'android debug'; then
+            echo "::error::Debug signing certificate is not a production identity."
+            exit 1
+          fi
+      - name: Require real mobile workbench, authenticated Copilot and native terminal acceptance
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_SHA: ${{ github.event.workflow_run.head_sha }}
+          SEVEN_RELEASE_PLATFORM: android
+        run: node .seven/require-release-checks.mjs
+      - name: Publish exactly ONE installable APK and its checksum
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="v0.1.0-android"
+          ! gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || {
+            echo "::error::Release tag already published; never overwrite assets."
+            exit 1
+          }
+          test "$(git rev-parse HEAD)" = "$(gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq '.commit.sha')"
+          gh release create "$tag" release-assets/*.apk release-assets/SHA256SUMS.txt \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "Seven Code Android v0.1.0 — complete local Code OSS" \
+            --notes "One self-contained verified Android APK. Includes original Code OSS and native Android terminal. On-device Copilot/OAuth and extension-host E2E acceptance required." \
+            --latest=false
