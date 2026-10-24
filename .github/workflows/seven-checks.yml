@@ -48,6 +48,8 @@ jobs:
           node --test .seven/tests/android-gnu-apk-experiment.test.mjs
           node --test .seven/tests/android-gnu-device-e2e.test.mjs
           python -m py_compile .seven/android/verify-gnu-apk.py
+          python -m unittest discover -s .seven/android -p 'test_verify_gnu_apk.py'
+          python -m unittest discover -s .seven/android -p 'test_isolated_gnu_runtime.py'
           python -m py_compile .seven/render-icons.py
           python - <<'PY'
           import xml.etree.ElementTree as ET

@@ -49,6 +49,20 @@ python3 .seven/android/verify-gnu-apk.py "$instrumented"
 adb install -r -t "$instrumented"
 adb install -r -t "$test_signed"
 
+# When an authentic on-device editor startup fails, retain the real server
+# failure reason, never substitute a mocked workbench or a green check.
+# Scrub ephemeral 64-digit connection tokens from CI output.
+diagnose_android_codeoss_failure() {
+  local status=$?
+  if [[ "$status" -ne 0 ]]; then
+    echo "::error::Real Code OSS Android acceptance failed (exit $status)."
+    adb shell run-as dev.seven.code cat files/seven-code-oss-local/server.log 2>/dev/null |
+      sed -E 's/[[:xdigit:]]{64}/[redacted-local-token]/g' |
+      tail -n 55 || true
+  fi
+}
+trap diagnose_android_codeoss_failure EXIT
+
 # Test the editor delivered by the *single original 300+ MB APK*, not a fake
 # remote browser or a standalone .html test fixture. Keep the result in CI.
 adb shell am instrument -w -r \

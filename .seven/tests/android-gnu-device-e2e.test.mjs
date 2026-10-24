@@ -15,6 +15,9 @@ test('full GNU single APK device test uses actual prebuilt 300 MB artifact and n
   assert.match(bash, /adb install -r -t/);
   assert.match(bash, /set -euo pipefail/);
   assert.ok(bash.includes('seven-gnu-e2e.keystore'));
+  assert.ok(bash.includes('diagnose_android_codeoss_failure'));
+  assert.ok(bash.includes('redacted-local-token'));
+  assert.ok(bash.includes('server.log'));
   assert.ok(bash.includes('keytool -genkeypair'));
   assert.ok(bash.includes('test -n "$app_cert" && test "$app_cert" = "$test_cert"'));
   assert.ok(bash.includes('apksigner'));
