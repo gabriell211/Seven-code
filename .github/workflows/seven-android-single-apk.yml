@@ -1,0 +1,114 @@
+name: Seven Code Android - assemble single self-contained APK
+
+on:
+  workflow_run:
+    workflows: ["Seven Code Android - convert Code OSS native modules to Bionic"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  standalone:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    name: Build self-contained Android APK (NOT a release)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v4
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.13"
+      - name: Prepare Android Gradle toolchains and native ELF audit
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-36" "build-tools;36.0.0" "cmake;3.22.1" "ndk;27.2.12479018"
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq zip unzip binutils
+      - name: Download compiled Bionic addons with source provenance
+        if: github.event_name == 'workflow_run'
+        uses: actions/download-artifact@v4
+        with:
+          name: SevenCode-Android-Bionic-core-node-addons
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/addons
+      - name: Extract source run and pin artifacts to exact revision
+        if: github.event_name == 'workflow_run'
+        id: source
+        run: |
+          set -euo pipefail
+          run_id=$(cat "$RUNNER_TEMP/addons/UPSTREAM_RUN_ID.txt")
+          source_sha=$(cat "$RUNNER_TEMP/addons/SOURCE_SHA.txt")
+          [[ "$run_id" =~ ^[0-9]+$ && "$source_sha" =~ ^[0-9a-f]{40}$ ]]
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+          echo "source_sha=$source_sha" >> "$GITHUB_OUTPUT"
+          test -s "$RUNNER_TEMP/addons/pty.node"
+          test -s "$RUNNER_TEMP/addons/watcher.node"
+          test -s "$RUNNER_TEMP/addons/vscode-sqlite3.node"
+      - name: Fetch original compiled Code OSS and signed Bionic Node for same source run
+        if: github.event_name == 'workflow_run'
+        uses: actions/download-artifact@v4
+        with:
+          run-id: ${{ steps.source.outputs.run_id }}
+          github-token: ${{ github.token }}
+          pattern: SevenCode-*
+          path: ${{ runner.temp }}/upstream
+      - name: Build reproducible local Code OSS runtime inside Android APK
+        if: github.event_name == 'workflow_run'
+        run: |
+          set -euo pipefail
+          test "$GITHUB_SHA" = "${{ steps.source.outputs.source_sha }}" || echo "::notice::Workflow source SHA differs from current build scripts; exact runtime artifacts still paired by upstream run."
+          mkdir -p "$RUNNER_TEMP/inputs"
+          server="$RUNNER_TEMP/inputs/vscode-reh-web-linux-arm64"
+          bionic="$RUNNER_TEMP/inputs/seven-bionic"
+          tar -xzf "$RUNNER_TEMP/upstream/SevenCode-CodeOSS-linux-arm64-build/SevenCode-CodeOSS-linux-arm64-build.tar.gz" -C "$RUNNER_TEMP/inputs"
+          tar -xzf "$RUNNER_TEMP/upstream/SevenCode-Node-Android-Bionic-arm64/SevenCode-Node-Android-Bionic-arm64.tar.gz" -C "$RUNNER_TEMP/inputs"
+          test -s "$server/out/server-main.js"
+          test -s "$bionic/libnode.so"
+          mkdir -p "$server/node_modules/node-pty/build/Release"
+          mkdir -p "$server/node_modules/@parcel/watcher/build/Release"
+          mkdir -p "$server/node_modules/@vscode/sqlite3/build/Release"
+          cp "$RUNNER_TEMP/addons/pty.node" "$server/node_modules/node-pty/build/Release/pty.node"
+          cp "$RUNNER_TEMP/addons/watcher.node" "$server/node_modules/@parcel/watcher/build/Release/watcher.node"
+          cp "$RUNNER_TEMP/addons/vscode-sqlite3.node" "$server/node_modules/@vscode/sqlite3/build/Release/vscode-sqlite3.node"
+          # Code OSS gulp bundles a GNU/Linux Node executable. Android uses
+          # the verified Bionic libnode.so shipped in the APK, never that ELF.
+          rm -f "$server/node"
+          # Preserve notices from the exact source tree when gulp omits them.
+          test -s "$server/LICENSE.txt" || cp LICENSE.txt "$server/LICENSE.txt"
+          test -s "$server/ThirdPartyNotices.txt" || cp ThirdPartyNotices.txt "$server/ThirdPartyNotices.txt"
+          python3 .seven/android/audit-codeoss-abi.py "$server" --stage android-bionic
+          node .seven/package-android-local-runtime.mjs \
+            "$server" "$bionic/libnode.so" "$bionic/NOTICE-node.txt" "$bionic"
+          test -s mobile/android/app/src/main/assets/seven-local/server.zip
+          test -s mobile/android/app/src/main/jniLibs/arm64-v8a/libnode.so
+          gradle -p mobile/android :app:assembleDebug --no-daemon --stacktrace
+          mkdir -p "$RUNNER_TEMP/single-apk"
+          cp mobile/android/app/build/outputs/apk/debug/app-debug.apk \
+            "$RUNNER_TEMP/single-apk/SevenCode-Android-arm64-local-debug.apk"
+          node .seven/require-single-apk-release.mjs "$RUNNER_TEMP/single-apk"
+          sha256sum "$RUNNER_TEMP/single-apk/"*.apk > "$RUNNER_TEMP/single-apk/SHA256SUMS.txt"
+          echo "Single APK built and verified; production release remains gated by genuine device + Copilot E2E."
+      - uses: actions/upload-artifact@v4
+        if: success() && github.event_name == 'workflow_run'
+        with:
+          name: SevenCode-Android-arm64-self-contained-test-APK
+          path: ${{ runner.temp }}/single-apk
+          retention-days: 14
+          if-no-files-found: error
