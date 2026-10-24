@@ -88,6 +88,22 @@ BUILD_ID_FLAG=(-Wl,--build-id=sha1)
 # posix_spawn_file_actions_addchdir_np did. Weak references are still allowed.
 NO_UNDEFINED_FLAG=(-Wl,-z,defs)
 
+# API26 Bionic does not export the GNU libgcc_s.so.1 _Unwind_* ABI.
+# LLVM's real AArch64 unwinder is shipped as a static archive in NDK r27.
+# Include it in the experimental shim for API26 instead of fabricating
+# stack-unwind functions, which would silently corrupt C++ exceptions.
+UNWIND_ARCHIVE_FLAGS=()
+if [ "$API" = 26 ]; then
+    UNWIND_ARCHIVE="$(find "$NDK/toolchains/llvm/prebuilt/$HOST_TAG/lib/clang" \
+      -type f -path '*/lib/linux/aarch64/libunwind.a' -print -quit)"
+    test -n "$UNWIND_ARCHIVE" && test -s "$UNWIND_ARCHIVE" || {
+        echo "ERROR: NDK r27's real Android AArch64 libunwind.a not available" >&2
+        exit 1
+    }
+    echo "  Android 26: linking LLVM AArch64 libunwind.a (real unwinder)"
+    UNWIND_ARCHIVE_FLAGS=(-Wl,--whole-archive "$UNWIND_ARCHIVE" -Wl,--no-whole-archive)
+fi
+
 echo ""
 echo "--- libglibc-shim.so ---"
 # -soname because the library now looks itself up by name at load time, to fill
@@ -112,6 +128,7 @@ echo "--- libglibc-shim.so ---"
     -I"$SCRIPT_DIR/libucontext/arch/common" \
     -fomit-frame-pointer \
     -Wl,-soname,libglibc-shim.so \
+    "${UNWIND_ARCHIVE_FLAGS[@]}" \
     -llog \
     "${PAGE_SIZE_FLAGS[@]}" \
     "${BUILD_ID_FLAG[@]}" \
