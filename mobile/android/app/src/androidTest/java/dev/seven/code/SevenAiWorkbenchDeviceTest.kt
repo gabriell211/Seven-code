@@ -1,13 +1,11 @@
 package dev.seven.code
 
 import android.app.AlertDialog
-import android.content.Context
 import android.os.SystemClock
 import android.view.ViewGroup
 import android.webkit.WebView
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import androidx.test.platform.app.InstrumentationRegistry
 import org.json.JSONObject
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -27,12 +25,7 @@ class SevenAiWorkbenchDeviceTest {
 
     private fun withWebTool(requestId: String, command: String,
                             check: (ActivityScenario<MainActivity>) -> Unit) {
-        val ctx = InstrumentationRegistry.getInstrumentation().targetContext
-        val prefs = ctx.getSharedPreferences("MainActivity", Context.MODE_PRIVATE)
-        val old = prefs.getString("workbenchUrl", null)
-        prefs.edit().putString("workbenchUrl", "$origin/probe").commit()
-        try {
-            ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
                 val request = JSONObject()
                     .put("type", "ai-propose").put("requestId", requestId)
                     .put("command", command).put("timeoutMs", 20_000)
@@ -45,6 +38,7 @@ class SevenAiWorkbenchDeviceTest {
                     </script>
                 """.trimIndent()
                 scenario.onActivity { activity ->
+                    SevenWebWorkbenchTestHarness.attach(activity, "$origin/probe")
                     val root = activity.findViewById<ViewGroup>(android.R.id.content)
                     val webView = root.getChildAt(0) as WebView
                     webView.stopLoading()
@@ -52,11 +46,6 @@ class SevenAiWorkbenchDeviceTest {
                 }
                 check(scenario)
             }
-        } finally {
-            val editor = prefs.edit()
-            if (old == null) editor.remove("workbenchUrl") else editor.putString("workbenchUrl", old)
-            editor.commit()
-        }
     }
 
     private fun clickNativeConsent(scenario: ActivityScenario<MainActivity>, allow: Boolean) {

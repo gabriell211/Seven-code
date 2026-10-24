@@ -1,12 +1,10 @@
 package dev.seven.code
 
 import android.app.AlertDialog
-import android.content.Context
 import android.os.SystemClock
 import android.webkit.WebView
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -27,12 +25,7 @@ class SevenWebViewNativeBridgeTest {
         session: String,
         onActivity: (ActivityScenario<MainActivity>) -> Unit
     ) {
-        val context = InstrumentationRegistry.getInstrumentation().targetContext
-        val prefs = context.getSharedPreferences("MainActivity", Context.MODE_PRIVATE)
-        val previousUrl = prefs.getString("workbenchUrl", null)
-        prefs.edit().putString("workbenchUrl", origin + "/probe").commit()
-        try {
-            ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
                 val page = """
                     <!doctype html><meta charset="utf-8">
                     <script>
@@ -53,6 +46,7 @@ class SevenWebViewNativeBridgeTest {
                     </script>
                 """.trimIndent()
                 scenario.onActivity { activity ->
+                    SevenWebWorkbenchTestHarness.attach(activity, origin + "/probe")
                     val root = activity.findViewById<android.view.ViewGroup>(android.R.id.content)
                     val web = root.getChildAt(0) as WebView
                     web.stopLoading()
@@ -60,11 +54,6 @@ class SevenWebViewNativeBridgeTest {
                 }
                 onActivity(scenario)
             }
-        } finally {
-            val editor = prefs.edit()
-            if (previousUrl == null) editor.remove("workbenchUrl") else editor.putString("workbenchUrl", previousUrl)
-            editor.commit()
-        }
     }
 
     private fun waitForApproval(scenario: ActivityScenario<MainActivity>, approve: Boolean) {
