@@ -39,6 +39,7 @@ jobs:
           python -m py_compile .seven/android/experimental-glibc/verify-android-elf.py
           bash -n .seven/android/experimental-glibc/build-glibc-shim.sh
           bash -n mobile/android/tools/build-bionic-addons.sh
+          bash -n .seven/android/run-gnu-apk-e2e.sh
           node --test .seven/tests/android-apk-package.test.mjs
           node --test .seven/tests/android-local-first.test.mjs
           node --test .seven/tests/android-pipeline-revision.test.mjs

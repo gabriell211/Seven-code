@@ -7,6 +7,7 @@ on:
       - ".github/workflows/seven-android-gnu-device-e2e.yml"
       - "mobile/android/app/src/androidTest/java/dev/seven/code/SevenStandaloneGnuDeviceTest.kt"
       - ".seven/android/verify-gnu-apk.py"
+      - ".seven/android/run-gnu-apk-e2e.sh"
   workflow_run:
     workflows: ["Seven Code Android - experimental isolated GNU ARM64 single APK"]
     types: [completed]
@@ -115,22 +116,4 @@ jobs:
           profile: pixel_5
           emulator-boot-timeout: 600
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -partition-size 8192 -memory 3072
-          script: |
-            set -euo pipefail
-            abi=$(adb shell getprop ro.product.cpu.abilist | tr -d '\r')
-            echo "Android ABI availability: $abi"
-            if [[ "$abi" != *arm64-v8a* ]]; then
-              echo "::error::This emulator lacks ARM64 translation. Cannot validate the original ARM64 GNU Code OSS; an ARM64 Android device/runner is mandatory."
-              exit 1
-            fi
-            adb shell df -h /data
-            adb install -r -t "$RUNNER_TEMP/experimental-apk/SevenCode-gnu-arm64-EXPERIMENTAL-debug.apk"
-            adb install -r -t mobile/android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
-            adb shell am instrument -w -r \
-              -e class dev.seven.code.SevenStandaloneGnuDeviceTest \
-              dev.seven.code.test/androidx.test.runner.AndroidJUnitRunner \
-              | tee "$RUNNER_TEMP/gnu-android-instrumentation.txt"
-            grep -Fq "OK (1 test)" "$RUNNER_TEMP/gnu-android-instrumentation.txt"
-            grep -Fq "INSTRUMENTATION_CODE: -1" "$RUNNER_TEMP/gnu-android-instrumentation.txt"
-            echo "Real original local Code OSS workbench ran in installed Android APK."
-            echo "This still does NOT prove real authenticated Copilot OAuth or production eligibility."
+          script: bash .seven/android/run-gnu-apk-e2e.sh
