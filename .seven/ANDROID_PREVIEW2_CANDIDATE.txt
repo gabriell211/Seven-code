@@ -1,0 +1,2 @@
+Android Preview 2 release candidate
+APK must pass instrumented Android WebView/JNI approval tests, full workbench command-palette -> native adapter in Chromium, and remote server smoke E2E. Both artifacts from same commit, debug preview only.
