@@ -141,6 +141,31 @@ mkdir -p "$OUT/sqlite"
 "$STRIP" "$OUT/sqlite/vscode-sqlite3.node"
 verify "$OUT/sqlite/vscode-sqlite3.node"
 
+# Native process liveness watchdog and Code OSS spdlog logging use public
+# MIT sources and can be ported without changing VS Code's JavaScript API.
+SPDLOG_VERSION="$(get_version @vscode/spdlog)"
+WATCHDOG_VERSION="$(get_version @vscode/native-watchdog)"
+echo "Native Code OSS addons: spdlog=$SPDLOG_VERSION watchdog=$WATCHDOG_VERSION"
+fetch_package @vscode/spdlog "$SPDLOG_VERSION" "$WORK/spdlog"
+fetch_package @vscode/native-watchdog "$WATCHDOG_VERSION" "$WORK/native-watchdog"
+
+build_shared "$WORK/spdlog" "$OUT/spdlog/spdlog.node" "$WORK/api7" \
+  src/main.cc src/logger.cc -- -fexceptions \
+  -I"$WORK/spdlog/deps/spdlog/include" -DNODE_API_SWALLOW_UNTHROWABLE_EXCEPTIONS \
+  -DFMT_CONSTEVAL= -DNODE_GYP_MODULE_NAME=spdlog -latomic
+verify "$OUT/spdlog/spdlog.node"
+
+# Native watchdog directly uses Node's N-API and libuv (exported by the
+# Bionic Node executable); it does not need the node-addon-api wrapper.
+build_shared "$WORK/native-watchdog" "$OUT/watchdog/watchdog.node" "$WORK/api7" \
+  src/watchdog.cc -- -DNODE_GYP_MODULE_NAME=watchdog -fstack-protector-strong
+verify "$OUT/watchdog/watchdog.node"
+
+mkdir -p "$SERVER/node_modules/@vscode/spdlog/build/Release"
+mkdir -p "$SERVER/node_modules/@vscode/native-watchdog/build/Release"
+cp "$OUT/spdlog/spdlog.node" "$SERVER/node_modules/@vscode/spdlog/build/Release/spdlog.node"
+cp "$OUT/watchdog/watchdog.node" "$SERVER/node_modules/@vscode/native-watchdog/build/Release/watchdog.node"
+
 cp "$OUT/node-pty/pty.node" "$SERVER/node_modules/node-pty/build/Release/pty.node"
 cp "$OUT/watcher/watcher.node" "$SERVER/node_modules/@parcel/watcher/build/Release/watcher.node"
 cp "$OUT/sqlite/vscode-sqlite3.node" "$SERVER/node_modules/@vscode/sqlite3/build/Release/vscode-sqlite3.node"
