@@ -1,0 +1,49 @@
+name: Seven Code iOS WKWebView simulator build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "mobile/ios/**"
+      - ".github/workflows/seven-ios-simulator.yml"
+  pull_request:
+    paths:
+      - "mobile/ios/**"
+      - ".github/workflows/seven-ios-simulator.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: seven-ios-simulator-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  simulator:
+    runs-on: macos-15
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate native iOS Xcode project
+        run: xcodegen generate --spec mobile/ios/project.yml --project mobile/ios
+      - name: Compile real SwiftUI WKWebView host
+        run: |
+          set -euo pipefail
+          xcodebuild -project mobile/ios/SevenCode.xcodeproj \
+            -scheme SevenCode -configuration Debug \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/seven-code-ios" \
+            CODE_SIGNING_ALLOWED=NO build
+          test -s "$RUNNER_TEMP/seven-code-ios/Build/Products/Debug-iphonesimulator/SevenCode.app/SevenCode"
+      - name: Package simulator-only iOS artifact
+        run: |
+          cd "$RUNNER_TEMP/seven-code-ios/Build/Products/Debug-iphonesimulator"
+          ditto -c -k --keepParent SevenCode.app "$RUNNER_TEMP/SevenCode-iOS-Simulator.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SevenCode-iOS-Simulator-Not-a-Device-Release
+          path: ${{ runner.temp }}/SevenCode-iOS-Simulator.zip
+          if-no-files-found: error
