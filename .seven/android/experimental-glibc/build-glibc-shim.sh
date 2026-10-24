@@ -38,7 +38,11 @@ TARGET=aarch64-linux-android
 # The app's minSdk. The stubs the link and the forwarder check resolve against
 # are this level's, which is what makes a name Bionic gained later a build
 # failure here rather than a dlopen failure on the oldest supported device.
-API=30
+API="${ANDROID_API:-30}"
+case "$API" in
+  26|30) ;;
+  *) echo "ERROR: unsupported experimental Android API level $API" >&2; exit 1 ;;
+esac
 
 # The names a glibc-linked binary carries in DT_NEEDED. Every stub finds its
 # targets through the shim's resolver, whichever Bionic library holds them, so
