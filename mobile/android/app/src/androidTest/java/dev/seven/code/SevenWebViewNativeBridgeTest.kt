@@ -103,6 +103,21 @@ class SevenWebViewNativeBridgeTest {
         return response.get() == "true"
     }
 
+    private fun browserEventSnapshot(scenario: ActivityScenario<MainActivity>): String {
+        val latch = CountDownLatch(1)
+        val response = AtomicReference("No JavaScript result")
+        scenario.onActivity { activity ->
+            val root = activity.findViewById<android.view.ViewGroup>(android.R.id.content)
+            val web = root.getChildAt(0) as WebView
+            web.evaluateJavascript("JSON.stringify(window.sevenEvents || [])") { value ->
+                response.set(value)
+                latch.countDown()
+            }
+        }
+        if (!latch.await(4, TimeUnit.SECONDS)) return "JavaScript callback timed out"
+        return response.get()
+    }
+
     @Test
     fun userApprovedCommandFlowsFromRealWebViewToNativePtyAndBack() {
         withBridgePage("bridgeApproved01") { scenario ->
@@ -136,7 +151,11 @@ class SevenWebViewNativeBridgeTest {
                 if (denied) return@withBridgePage
                 SystemClock.sleep(120)
             }
-            assertTrue("Denied native terminal must exit before reporting ready", denied)
+            assertTrue(
+                "Denied native terminal must exit before reporting ready; events: " +
+                    browserEventSnapshot(scenario),
+                denied
+            )
         }
     }
 }
