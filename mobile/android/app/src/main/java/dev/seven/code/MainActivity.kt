@@ -505,11 +505,6 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun sendEvent(type: String, value: String) {
-        if (!::webView.isInitialized) return
-        sendPayload(JSONObject().put("type", type).put("value", value))
-    }
-
     private fun closeWorkbenchTerminals() {
         terminalGeneration++
         pendingSessions.values.toList().forEach { it.dismiss() }
