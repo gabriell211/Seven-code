@@ -37,6 +37,12 @@ class IsolatedGnuRuntimeTests(unittest.TestCase):
             "node_modules/@github/copilot-sdk-linux-arm64/prebuilds/linux-arm64/copilot-runtime"))
         self.assertFalse(SCRIPT.is_foreign_architecture_path("bin/unknown-elf"))
 
+    def test_original_node_and_loader_keep_executable_mode(self):
+        self.assertIn('shutil.copy2(loader, out / "ld-linux-aarch64.so.1")',
+                      MODULE.read_text())
+        self.assertIn('shutil.copy2(node, out / "node")', MODULE.read_text())
+        self.assertNotIn('shutil.copyfile(loader,', MODULE.read_text())
+
     def test_native_elf_architecture_is_checked(self):
         self.assertEqual(SCRIPT.AARCH64, 183)
         self.assertEqual(SCRIPT.ELF_MAGIC, b"\x7fELF")

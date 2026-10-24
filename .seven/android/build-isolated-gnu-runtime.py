@@ -181,8 +181,10 @@ def main():
     libc = collected.get("libc.so.6")
     if libc is None:
         raise ValueError("glibc libc.so.6 absent from closure")
-    shutil.copyfile(loader, out / "ld-linux-aarch64.so.1")
-    shutil.copyfile(node, out / "node")
+    # Preserve the executable bit: copyfile() creates mode 0644 and
+    # execve() rejects the copied GNU dynamic loader with EACCES.
+    shutil.copy2(loader, out / "ld-linux-aarch64.so.1")
+    shutil.copy2(node, out / "node")
     # The loader is an executable, not a Bionic .node addon. Keep GNU and
     # Bionic runtimes isolated in different processes and namespaces.
     manifest = {
