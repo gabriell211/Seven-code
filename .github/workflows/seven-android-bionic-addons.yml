@@ -59,10 +59,9 @@ jobs:
           echo "BIONIC_PATH=$RUNNER_TEMP/staging/seven-bionic" >> "$GITHUB_ENV"
       - name: Compile native Android/Bionic PTY, watcher and SQLite
         if: github.event_name == 'workflow_run'
-        env:
-          ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.2.12479018
         run: |
           set -euo pipefail
+          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/27.2.12479018"
           bash mobile/android/tools/build-bionic-addons.sh "$CODEOSS_PATH" "$BIONIC_PATH"
       - name: Audit remaining ABI conversions; never label GNU/Linux modules Android
         if: github.event_name == 'workflow_run'
