@@ -34,6 +34,7 @@ jobs:
           node --test .seven/tests/android-pty-process.test.mjs
           node --test .seven/tests/android-system-ime.test.mjs
           node --test .seven/tests/android-preview-install.test.mjs
+          bash -n .seven/android/verify-preview-coinstall-emulator.sh
           node --test .seven/tests/android-localization.test.mjs
           node --test .seven/tests/release-qualification.test.mjs
           node --test .seven/tests/single-apk-release.test.mjs
