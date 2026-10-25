@@ -40,6 +40,22 @@ test('Android packages ORIGINAL static Code OSS web workbench with no URL prompt
     assert.match(html, /id="seven-code-root"/);
     assert.match(bootstrap, /workbench\.web\.main\.internal\.js/);
     assert.match(html, /workbench\.web\.main\.internal\.css/);
+    // Real animated loader, including accessibility and recovery. Never just a
+    // screenshot/static branding asset, nor a guessed percentage.
+    assert.match(html, /SEVEN<span>CODE<\/span>/);
+    assert.match(html, /@keyframes seven-spin/);
+    assert.match(html, /@keyframes seven-progress/);
+    assert.match(html, /prefers-reduced-motion/);
+    assert.match(html, /id="seven-loading-message"/);
+    assert.match(html, /id="seven-loading-retry"/);
+    assert.match(html, /setTimeout\(/);
+    assert.match(html, /65000/); // Watchdog if the Workbench JS never executes.
+    assert.match(bootstrap, /document\.querySelector\('\.monaco-workbench'\)/);
+    assert.match(bootstrap, /getBoundingClientRect\(\)\.width/);
+    assert.match(bootstrap, /splash\?\.complete\(\)/);
+    assert.match(bootstrap, /splash\?\.fail\(/);
+    assert.doesNotMatch(bootstrap, /getElementById\('seven-code-loading'\)\?\.remove/);
+
     assert.match(bootstrap, /out\/nls\.messages\.js/);
     assert.doesNotMatch(html, /\{\{WORKBENCH_/);
     assert.doesNotMatch(html, /remoteAuthority|https:\/\/vscode\.dev|127\.0\.0\.1/);
