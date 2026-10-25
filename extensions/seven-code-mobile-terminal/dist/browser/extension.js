@@ -130,6 +130,7 @@ async function hasNativeHost() {
             if (settled) return;
             settled = true;
             clearTimeout(timer);
+            repeats.forEach(clearTimeout);
             channel.close();
             resolve(value);
         }
@@ -139,7 +140,14 @@ async function hasNativeHost() {
                 finish(true);
             }
         };
-        const timer = setTimeout(() => finish(false), 1500);
+        // Real Android WebView and Web Worker can initialize at different speeds.
+        // Never disable file/picker commands just because first ping arrived early.
+        const repeats = [
+            setTimeout(() => channel.postMessage({ type: 'probe', nonce }), 500),
+            setTimeout(() => channel.postMessage({ type: 'probe', nonce }), 1500),
+            setTimeout(() => channel.postMessage({ type: 'probe', nonce }), 3200)
+        ];
+        const timer = setTimeout(() => finish(false), 8000);
         channel.postMessage({ type: 'probe', nonce });
     });
 }
