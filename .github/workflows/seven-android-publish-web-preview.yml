@@ -1,0 +1,152 @@
+name: Seven Code Android - publish verified Web APK prerelease
+
+# A *single* user-requested preview of the real, emulator-tested Code OSS Web
+# editor. It is never a stable release and does not bypass the separate native
+# Node/Copilot E2E production-release policy.
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/seven-android-publish-web-preview.yml"
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: seven-code-web-preview-publish
+  cancel-in-progress: false
+
+jobs:
+  publish-tested-web-preview:
+    name: Publish exactly one emulator-verified Android debug APK as prerelease
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Confirm source commit is the same successfully tested original Code OSS
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: f2937e62f7ed500e473605fd304b5f5a40767979
+          VERIFIED_RUN_ID: "40212076374"
+          RELEASE_TAG: v0.2.0-android-web-preview.1
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git rev-parse HEAD^)" = "$SOURCE_SHA" || {
+            echo "::error::The qualified build is not the exact main parent revision"
+            exit 1
+          }
+          main_sha=$(gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq '.commit.sha')
+          test "$main_sha" = "$GITHUB_SHA" || {
+            echo "::error::Main moved; refuse stale preview publication."
+            exit 1
+          }
+          run_sha=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$VERIFIED_RUN_ID" --jq '.head_sha')
+          run_conclusion=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$VERIFIED_RUN_ID" --jq '.conclusion')
+          run_branch=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$VERIFIED_RUN_ID" --jq '.head_branch')
+          test "$run_sha" = "$SOURCE_SHA"
+          test "$run_conclusion" = success
+          test "$run_branch" = main
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::Tag already released; assets cannot be silently overwritten."
+            exit 1
+          fi
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: SevenCode-Android-Web-offline-emulator-verified
+          run-id: 40212076374
+          github-token: ${{ github.token }}
+          path: input-artifact
+
+      - name: Verify exact original APK, offline editor, native IME and SHA-256
+        env:
+          RELEASE_TAG: v0.2.0-android-web-preview.1
+        run: |
+          set -euo pipefail
+          test "$(find input-artifact -maxdepth 1 -name '*.apk' -type f | wc -l)" -eq 1
+          (cd input-artifact && sha256sum -c SHA256SUMS.txt)
+          python3 - <<'PY'
+          from pathlib import Path
+          import zipfile
+          apk, = Path("input-artifact").glob("*.apk")
+          assert apk.stat().st_size > 50_000_000, "Thin APK refused"
+          with zipfile.ZipFile(apk) as pack:
+              assert pack.testzip() is None
+              paths = set(pack.namelist())
+              required = {
+                  "assets/seven-web/index.html",
+                  "assets/seven-web/bootstrap.js",
+                  "assets/seven-web/out/vs/workbench/workbench.web.main.internal.js",
+                  "assets/seven-web/extensions/copilot-chat/dist/web.js",
+                  "assets/seven-web/extensions/github-authentication/dist/browser/extension.js",
+                  "assets/seven-web/extensions/seven-code-mobile-terminal/dist/browser/extension.js",
+                  "lib/arm64-v8a/libsevenpty.so",
+              }
+              assert required <= paths, f"Missing actual editor/Android components: {required - paths}"
+              index = pack.read("assets/seven-web/index.html")
+              core = pack.read("assets/seven-web/out/vs/workbench/workbench.web.main.internal.js")
+              assert b"@keyframes seven-spin" in index, "Missing animated loading"
+              assert b"keyboard-request" in core, "Missing native Android IME bridge"
+              assert b"monaco-workbench" in core, "Missing actual Code OSS workbench"
+              print("Verified original Code OSS + Android keyboard + splash inside one APK")
+          PY
+          mkdir -p release-assets
+          cp input-artifact/SevenCode-Android-Web-offline-tested-debug.apk \
+            release-assets/SevenCode-v0.2.0-android-web-preview.1-debug.apk
+          (cd release-assets && sha256sum *.apk > SHA256SUMS.txt && sha256sum -c SHA256SUMS.txt)
+          test "$(find release-assets -maxdepth 1 -name '*.apk' -type f | wc -l)" -eq 1
+
+      - name: Publish clearly-labeled GitHub prerelease, NOT a production release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: f2937e62f7ed500e473605fd304b5f5a40767979
+          RELEASE_TAG: v0.2.0-android-web-preview.1
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/notes.md" <<'NOTES'
+          ## Seven Code Android — Web Preview (TESTE, NÃO ESTÁVEL)
+
+          **Este APK é uma prévia de testes**, assinada com a identidade Android debug do CI.
+          Não é a versão final completa do VS Code/Code OSS no Android.
+
+          ### Comprovado pelo CI
+          - Único APK autônomo contendo a interface Web original Code OSS, sem URL de servidor a configurar.
+          - O editor inicia e renderiza no emulador Android (API 35).
+          - Teclado padrão Android (IME) acionado a partir de campos do editor no emulador.
+          - Tela de carregamento animada com tratamento de erro.
+          - Ponte de arquivos locais Android (Storage Access Framework) e PTY/terminal nativo incluídos.
+          - APK e SHA-256 verificados.
+
+          ### Ainda NÃO homologado
+          - Extensões Node.js de workspace e addon nativo Copilot em Android ARM64.
+          - Autorização OAuth de uma conta real e respostas autenticadas Copilot Chat/Agent.
+          - Uso em todos os aparelhos Android reais. Algumas funções ainda podem falhar.
+
+          **Aviso:** o APK é debug-signed para teste. Faça backup dos seus arquivos; uma
+          versão assinada de produção poderá exigir reinstalação.
+
+          Artefato original, workflow e provas: https://github.com/gabriell211/Seven-code/actions/runs/40212076374
+          Código-fonte auditável no commit: f2937e62f7ed500e473605fd304b5f5a40767979
+
+          Release de produção continua sujeita às verificações E2E de
+          `.seven/require-release-checks.mjs` e ao build ARM64 integral
+          em `.github/workflows/seven-android-final-release.yml`.
+          NOTES
+          main_sha=$(gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq '.commit.sha')
+          test "$main_sha" = "$GITHUB_SHA" || {
+            echo "::error::Main changed during release; refusing."
+            exit 1
+          }
+          ! gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1
+          gh release create "$RELEASE_TAG" release-assets/*.apk release-assets/SHA256SUMS.txt \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$SOURCE_SHA" \
+            --title "Seven Code v0.2.0 — Android Web Preview (teste)" \
+            --notes-file "$RUNNER_TEMP/notes.md" \
+            --prerelease --latest=false
