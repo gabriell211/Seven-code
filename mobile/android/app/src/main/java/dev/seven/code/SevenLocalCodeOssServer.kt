@@ -104,6 +104,7 @@ internal class SevenLocalCodeOssServer(private val context: Context) {
         probe.environment().apply {
             put("LD_LIBRARY_PATH", launch.libraryPath)
             put("HOME", context.filesDir.absolutePath)
+            put("SEVEN_ANDROID_NODE_PROOF_DIR", context.filesDir.absolutePath)
             put("TMPDIR", context.cacheDir.absolutePath)
             put("NODE_OPTIONS", "--require=${launch.bootstrap.absolutePath}")
         }
@@ -223,6 +224,7 @@ internal class SevenLocalCodeOssServer(private val context: Context) {
             .redirectOutput(log)
         env.environment().apply {
             put("HOME", context.filesDir.absolutePath)
+            put("SEVEN_ANDROID_NODE_PROOF_DIR", context.filesDir.absolutePath)
             put("TMPDIR", context.cacheDir.absolutePath)
             put("XDG_CONFIG_HOME", File(root, "config").absolutePath)
             put("XDG_CACHE_HOME", File(root, "cache").absolutePath)

@@ -61,6 +61,14 @@ jobs:
         run: |
           set -euo pipefail
           root="../vscode-reh-web-linux-arm64"
+          # Preserve a workspace-only Node extension inside the ORIGINAL Code OSS
+          # runtime tree; it verifies child_process.fork + IPC and Copilot N-API
+          # on the actual Android device, not on a WebView worker.
+          mkdir -p "$root/extensions/seven-code-node-runtime-smoke"
+          cp extensions/seven-code-node-runtime-smoke/package.json \
+             extensions/seven-code-node-runtime-smoke/extension.js \
+             "$root/extensions/seven-code-node-runtime-smoke/"
+          test -s "$root/extensions/seven-code-node-runtime-smoke/extension.js"
           test -s "$root/out/server-main.js"
           test -s "$root/out/vs/code/browser/workbench/workbench.js"
           echo "Compiled Code OSS extension host candidates:"

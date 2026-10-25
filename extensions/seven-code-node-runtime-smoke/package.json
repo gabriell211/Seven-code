@@ -1,0 +1,30 @@
+{
+  "name": "seven-code-node-runtime-smoke",
+  "displayName": "Seven Code Node.js Runtime Acceptance",
+  "publisher": "seven-code",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "main": "./extension.js",
+  "extensionKind": [
+    "workspace"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "categories": [
+    "Other"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "sevenCode.nodeRuntimeSmoke",
+        "title": "Seven Code: Diagnóstico REAL do runtime Node.js",
+        "category": "Seven Code"
+      }
+    ]
+  }
+}

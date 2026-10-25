@@ -442,6 +442,113 @@ async function signInToGitHub() {
     }
 }
 
+// This is a LIVE acceptance probe: it never synthesizes Copilot output,
+// uses the actual GitHub AuthenticationProvider and a real VS Code language
+// model response, and never logs or displays OAuth access tokens.
+async function verifyGitHubAndCopilotLive() {
+    if (!vscode.authentication?.getSession) {
+        await vscode.window.showErrorMessage('GitHub AuthenticationProvider não disponível.');
+        return;
+    }
+    const session = await vscode.authentication.getSession(
+        'github', ['read:user', 'user:email'], { createIfNone: false }
+    );
+    if (!session?.accessToken) {
+        await vscode.window.showWarningMessage(
+            'Nenhuma sessão GitHub autorizada. Execute Seven Code: Entrar com GitHub para Copilot.'
+        );
+        return;
+    }
+    let account;
+    try {
+        const result = await fetch('https://api.github.com/user', {
+            method: 'GET',
+            headers: {
+                Authorization: 'Bearer ' + session.accessToken,
+                Accept: 'application/vnd.github+json',
+                'X-GitHub-Api-Version': '2022-11-28'
+            },
+            redirect: 'error',
+            cache: 'no-store'
+        });
+        if (!result.ok) throw new Error('GitHub REST HTTP ' + result.status);
+        const user = await result.json();
+        if (typeof user?.login !== 'string' || !/^[A-Za-z0-9-]{1,39}$/.test(user.login)) {
+            throw new Error('GET /user não retornou identidade GitHub válida');
+        }
+        account = user.login;
+    } catch {
+        await vscode.window.showErrorMessage(
+            'O token GitHub não foi validado em https://api.github.com/user. Verifique rede e sessão.'
+        );
+        return;
+    }
+    if (typeof vscode.lm?.selectChatModels !== 'function' ||
+        !vscode.LanguageModelChatMessage?.User) {
+        await vscode.window.showWarningMessage(
+            'GitHub autenticado como ' + account + ', mas a API de modelos VS Code não está disponível.'
+        );
+        return;
+    }
+    let models;
+    try {
+        models = await vscode.lm.selectChatModels({ vendor: 'copilot' });
+    } catch {
+        models = [];
+    }
+    const model = models.find(candidate => candidate.vendor === 'copilot');
+    if (!model) {
+        await vscode.window.showWarningMessage(
+            'GitHub autenticado como ' + account +
+            ', mas nenhum modelo oficial Copilot está disponível. Confira licença e ativação da extensão.'
+        );
+        return;
+    }
+    const cancellation = new vscode.CancellationTokenSource();
+    const timeout = setTimeout(() => cancellation.cancel(), 45000);
+    try {
+        const response = await model.sendRequest([
+            vscode.LanguageModelChatMessage.User(
+                'Teste de conectividade: responda em português com uma frase curta sobre programação.'
+            )
+        ], {}, cancellation.token);
+        let text = '';
+        for await (const chunk of response.text) {
+            if (cancellation.token.isCancellationRequested) throw new Error('timeout');
+            text += chunk;
+            if (text.length > 8192) break;
+        }
+        if (text.trim().length < 3) throw new Error('Resposta Copilot vazia');
+        await vscode.window.showInformationMessage(
+            'GitHub real: ' + account + '. Resposta REAL do modelo Copilot "' +
+            model.id + '": ' + text.trim().slice(0, 260)
+        );
+    } catch {
+        await vscode.window.showErrorMessage(
+            'GitHub validado como ' + account +
+            ', mas o Copilot não entregou uma resposta real. Verifique assinatura, quota, rede e logs da extensão.'
+        );
+    } finally {
+        clearTimeout(timeout);
+        cancellation.cancel();
+        cancellation.dispose();
+    }
+}
+
+async function verifyCopilotAgentManual() {
+    const extension = vscode.extensions?.getExtension?.('GitHub.copilot-chat');
+    if (!extension) {
+        await vscode.window.showWarningMessage('Copilot Chat original indisponível neste host.');
+        return;
+    }
+    await vscode.commands.executeCommand('workbench.action.chat.open');
+    await vscode.window.showInformationMessage(
+        'Teste REAL do Agent: selecione Agent no Copilot Chat e peça para executar ' +
+        '"printf SEVEN_CODE_AGENT_REAL_OK". O Android deve pedir permissão nativa; ' +
+        'aceite e confira a saída real. Esta etapa exige sua participação e NÃO é marcada como aprovada automaticamente.'
+    );
+}
+
 async function openCopilotChat() {
     await vscode.commands.executeCommand('workbench.action.chat.open');
     if (!vscode.extensions?.getExtension?.('GitHub.copilot-chat')) {
@@ -486,6 +593,12 @@ async function activate(context) {
         ));
         context.subscriptions.push(vscode.commands.registerCommand(
             'sevenCode.githubSignIn', signInToGitHub
+        ));
+        context.subscriptions.push(vscode.commands.registerCommand(
+            'sevenCode.copilotLiveAcceptance', verifyGitHubAndCopilotLive
+        ));
+        context.subscriptions.push(vscode.commands.registerCommand(
+            'sevenCode.copilotAgentAcceptance', verifyCopilotAgentManual
         ));
         context.subscriptions.push(vscode.commands.registerCommand(
             'sevenCode.copilotStatus', showCopilotStatus
