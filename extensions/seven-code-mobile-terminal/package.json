@@ -17,7 +17,8 @@
     "onStartupFinished",
     "onCommand:sevenCode.openAndroidFolder",
     "onCommand:sevenCode.openCopilotChat",
-    "onCommand:sevenCode.copilotStatus"
+    "onCommand:sevenCode.copilotStatus",
+    "onCommand:sevenCode.githubSignIn"
   ],
   "capabilities": {
     "virtualWorkspaces": true,
@@ -52,6 +53,11 @@
       {
         "command": "sevenCode.copilotStatus",
         "title": "Seven Code: Diagnóstico do Copilot Android",
+        "category": "Seven Code"
+      },
+      {
+        "command": "sevenCode.githubSignIn",
+        "title": "Seven Code: Entrar com GitHub para Copilot",
         "category": "Seven Code"
       }
     ],

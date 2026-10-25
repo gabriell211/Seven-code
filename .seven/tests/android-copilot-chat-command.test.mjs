@@ -10,9 +10,13 @@ test('Android exposes the original Code OSS Chat and an explicit Copilot status 
   assert.equal(commands.find(x => x.command === 'sevenCode.openCopilotChat')?.title,
     'Seven Code: Abrir Copilot Chat');
   assert.ok(commands.some(x => x.command === 'sevenCode.copilotStatus'));
+  assert.equal(commands.find(x => x.command === 'sevenCode.githubSignIn')?.title,
+    'Seven Code: Entrar com GitHub para Copilot');
   assert.ok(manifest.activationEvents.includes('onCommand:sevenCode.openCopilotChat'));
   assert.match(source, /workbench\.action\.chat\.open/);
-  assert.match(source, /sevenCode\.copilotStatus/);
+  assert.match(source, /sevenCode\\.copilotStatus/);
+  assert.match(source, /vscode\\.authentication\\.getSession/);
+  assert.match(source, /createIfNone: true/);
 });
 
 test('Copilot authentication and Agent remain unverified until device E2E', () => {
