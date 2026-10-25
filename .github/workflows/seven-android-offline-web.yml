@@ -7,6 +7,7 @@ on:
     paths:
       - ".github/workflows/seven-android-offline-web.yml"
       - ".seven/package-android-web.mjs"
+      - ".seven/tests/android-system-ime.test.mjs"
       - "extensions/copilot/**"
       - ".seven/tests/android-copilot-chat-command.test.mjs"
       - "extensions/github-authentication/**"
@@ -30,6 +31,7 @@ on:
       - "src/vs/workbench/browser/sevenMobileTerminalBridge.ts"
       - ".github/workflows/seven-android-offline-web.yml"
       - ".seven/package-android-web.mjs"
+      - ".seven/tests/android-system-ime.test.mjs"
       - ".seven/verify-android-web.mjs"
       - ".seven/tests/android-web-bundle.test.mjs"
       - "mobile/android/app/src/main/**"
@@ -92,7 +94,7 @@ jobs:
         run: |
           set -euo pipefail
           node .seven/package-android-web.mjs ../vscode-web
-          node --test .seven/tests/android-web-bundle.test.mjs .seven/tests/android-copilot-chat-command.test.mjs .seven/tests/android-copilot-shell-tool.test.mjs .seven/tests/android-github-device-auth.test.mjs
+          node --test .seven/tests/android-web-bundle.test.mjs .seven/tests/android-system-ime.test.mjs .seven/tests/android-copilot-chat-command.test.mjs .seven/tests/android-copilot-shell-tool.test.mjs .seven/tests/android-github-device-auth.test.mjs
           test -s mobile/android/app/src/main/assets/seven-web/out/vs/workbench/workbench.web.main.internal.js
           test -s mobile/android/app/src/main/assets/seven-web/extensions/copilot-chat/dist/web.js
       - name: Build APK with Android native PTY and embedded Code OSS Web UI
