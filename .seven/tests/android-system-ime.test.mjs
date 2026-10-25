@@ -58,10 +58,20 @@ function render({ trusted }) {
         close() {}
         postMessage() {}
     }
+    const menus = [];
+    const MenuId = { AccountsContext: 'AccountsContext', EditorTitle: 'EditorTitle' };
+    const MenuRegistry = {
+        appendMenuItem(id, item) {
+            const entry = { id, item, disposed: false };
+            menus.push(entry);
+            return { dispose() { entry.disposed = true; } };
+        }
+    };
     const js = stripTypeScriptTypes(source, { mode: 'transform' })
         .replace(/export \{\s*\};?\s*$/, '');
-    runInNewContext(js, { window, document, Element, HTMLElement: Element, BroadcastChannel: Channel, JSON });
-    return { messages, listeners, document };
+    runInNewContext(js.replace(/^import.*MenuId.*MenuRegistry.*$/m, ''),
+        { window, document, Element, HTMLElement: Element, BroadcastChannel: Channel, JSON, MenuId, MenuRegistry });
+    return { messages, listeners, document, menus };
 }
 
 test('focus on Monaco textarea asks for the native Android keyboard', () => {
@@ -101,6 +111,17 @@ test('ordinary web browser without trusted Android host never opens a native IME
     assert.equal(app.listeners.has('focusin'), false);
     assert.equal(app.listeners.has('pointerup'), false);
     assert.equal(app.messages.length, 0);
+});
+
+test('real Android Accounts and Editor ellipsis menus expose actionable commands', () => {
+    const app = render({ trusted: true });
+    assert.deepEqual(app.menus.map(menu => [menu.id, menu.item.command.id]), [
+        ['AccountsContext', 'sevenCode.githubSignIn'],
+        ['EditorTitle', 'sevenCode.openAndroidFolder'],
+        ['EditorTitle', 'sevenCode.newAndroidFile']
+    ]);
+    app.listeners.get('pagehide')();
+    assert.ok(app.menus.every(menu => menu.disposed));
 });
 
 test('pagehide unregisters IME listeners and native channels', () => {
