@@ -32,6 +32,7 @@ jobs:
           node --test .seven/tests/android-phone-workspace.test.mjs
           node --experimental-strip-types --test .seven/tests/android-github-device-auth.test.mjs
           node --test .seven/tests/android-pty-process.test.mjs
+          node --test .seven/tests/android-system-ime.test.mjs
           node --test .seven/tests/release-qualification.test.mjs
           node --test .seven/tests/single-apk-release.test.mjs
           node --check .seven/require-single-apk-release.mjs
