@@ -81,6 +81,7 @@ class MainActivity : Activity() {
     private val popupWindows = mutableSetOf<WebView>()
     private var pendingExternalConsent = false
     private var localServer: SevenLocalCodeOssServer? = null
+    private val githubDeviceFlow = SevenGitHubDeviceFlow()
     private lateinit var mobileDocuments: SevenMobileDocuments
     private val webAssetLoader by lazy {
         WebViewAssetLoader.Builder()
@@ -378,6 +379,10 @@ class MainActivity : Activity() {
         if (!workbenchActive) return
         try {
             val data = JSONObject(raw)
+            if (data.optString("type") == "github-device-request") {
+                handleGitHubDeviceRequest(data)
+                return
+            }
             if (data.optString("type") == "fs-request") {
                 handleFileRequest(data)
                 return
@@ -468,6 +473,21 @@ class MainActivity : Activity() {
             }
         } catch (error: Exception) {
             // A malformed web message must not crash the Android workbench.
+        }
+    }
+
+    private fun handleGitHubDeviceRequest(data: JSONObject) {
+        val requestId = data.optString("requestId")
+        if (!sessionPattern.matches(requestId)) return
+        // HTTPS must run outside the Android main thread. Native only calls
+        // GitHub's two device-flow endpoints; no arbitrary URL can be supplied.
+        val generation = terminalGeneration
+        thread(name = "seven-github-device", isDaemon = true) {
+            val response = githubDeviceFlow.process(data)
+            runOnUiThread {
+                if (workbenchActive && generation == terminalGeneration &&
+                    !isFinishing && !isDestroyed) sendPayload(response)
+            }
         }
     }
 

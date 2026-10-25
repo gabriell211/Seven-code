@@ -391,8 +391,10 @@ class DeviceCodeFlow implements IFlow {
 		supportsGitHubEnterpriseServer: true,
 		supportsHostedGitHubEnterprise: true,
 		supportsRemoteExtensionHost: true,
-		// CORS prevents this from working in web workers
-		supportsWebWorkerExtensionHost: false,
+		// The Android APK has a strictly allowlisted native GitHub HTTPS bridge.
+		// Unmodified browser Code OSS still cannot run device flow due to CORS.
+		supportsWebWorkerExtensionHost: typeof globalThis.location !== 'undefined' &&
+			globalThis.location.origin === 'https://appassets.androidplatform.net',
 		supportsNoClientSecret: true,
 		supportsSupportedClients: true,
 		supportsUnsupportedClients: true
@@ -476,8 +478,8 @@ class DeviceCodeFlow implements IFlow {
 			});
 
 			// Try for 2 minutes
-			const attempts = 120 / json.interval;
-			for (let i = 0; i < attempts; i++) {
+			const deadline = Date.now() + 120_000;
+			for (let i = 0; Date.now() < deadline; i++) {
 				await new Promise(resolve => setTimeout(resolve, json.interval * 1000));
 				if (token.isCancellationRequested) {
 					throw new Error(USER_CANCELLATION_ERROR);
@@ -502,6 +504,13 @@ class DeviceCodeFlow implements IFlow {
 				}
 
 				const accessTokenJson = await accessTokenResult.json();
+
+				if (accessTokenJson.error === 'slow_down') {
+					// Respect GitHub device-flow backoff; never busy-poll auth endpoints.
+					const minimum = Math.max(5, Math.min(60, Number(accessTokenJson.interval) || json.interval + 5));
+					json.interval = Math.max(json.interval + 5, minimum);
+					continue;
+				}
 
 				if (accessTokenJson.error === 'authorization_pending') {
 					continue;
