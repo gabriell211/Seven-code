@@ -22,7 +22,7 @@ test('test Web preview is separately installable, with isolated Android sandbox 
     assert.match(gradle, /versionName = "0\.2\.0-preview\.3"/);
     assert.match(gradle, /manifestPlaceholders\["sevenAppLabel"\] = "Seven Code Preview"/);
     assert.match(workflow, /:app:assembleDebug -PsevenPreviewIsolated=true/);
-    assert.match(emulator, /connectedDebugAndroidTest[\\s\\S]*-PsevenPreviewIsolated=true/);
+    assert.match(emulator, /connectedDebugAndroidTest[\s\S]*-PsevenPreviewIsolated=true/);
 });
 
 test('Android packaging must reject malformed signatures and prove old and new app coexist', () => {
