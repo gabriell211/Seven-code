@@ -39,6 +39,16 @@ if (host && typeof BroadcastChannel !== 'undefined') {
         MenuRegistry.appendMenuItem(MenuId.EditorTitle, {
             command: { id: 'sevenCode.newAndroidFile', title: 'Novo arquivo no celular' },
             group: 'navigation@51'
+        }),
+        // Chat title ellipsis: a working authentication action and an honest
+        // diagnostic when the official Copilot Node host is unavailable.
+        MenuRegistry.appendMenuItem(MenuId.ChatTitleBarMenu, {
+            command: { id: 'sevenCode.githubSignIn', title: 'Entrar com GitHub' },
+            group: '1_seven_mobile@1'
+        }),
+        MenuRegistry.appendMenuItem(MenuId.ChatTitleBarMenu, {
+            command: { id: 'sevenCode.copilotStatus', title: 'Diagnóstico do Copilot' },
+            group: '1_seven_mobile@2'
         })
     ];
     // Monaco, xterm.js, the command palette and dialogs use real Chromium
