@@ -4,6 +4,10 @@ import android.os.SystemClock
 import android.graphics.Bitmap
 import java.io.File
 import android.webkit.WebView
+import android.os.Build
+import android.view.WindowInsets
+import android.content.Context
+import android.view.inputmethod.InputMethodManager
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.assertTrue
@@ -117,4 +121,80 @@ class SevenOfflineWebWorkbenchDeviceTest {
 
         }
     }
+    @Test
+    fun androidSystemKeyboardOpensForRealFocusedWebViewTextarea() {
+        // This is an on-emulator test of Chromium -> trusted WebMessageListener
+        // -> Android InputMethodManager. It NEVER installs a custom keyboard.
+        assumeTrue("IME window insets require Android R+", Build.VERSION.SDK_INT >= 30)
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val bundled = try {
+            context.assets.open("seven-web/bundle.json").use { true }
+        } catch (_: java.io.IOException) { false }
+        assumeTrue("Only the complete offline Web APK can prove IME end-to-end", bundled)
+        val enabledImes = (context.getSystemService(Context.INPUT_METHOD_SERVICE)
+            as InputMethodManager).enabledInputMethodList
+        assumeTrue("Android emulator has no configured system keyboard", enabledImes.isNotEmpty())
+        // Emulators have a virtual hardware keyboard by default, which can
+        // prevent the Android IME from appearing even though the app is correct.
+        // Enable the genuine Android IME for this device instrumentation.
+        instrumentation.uiAutomation.executeShellCommand(
+            "settings put secure show_ime_with_hard_keyboard 1"
+        ).close()
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            var focused = false
+            for (attempt in 0 until 70) {
+                val done = CountDownLatch(1)
+                val result = AtomicReference<String>("false")
+                scenario.onActivity { activity ->
+                    val root = activity.findViewById<android.view.ViewGroup>(android.R.id.content)
+                    val web = root.getChildAt(0) as? WebView
+                    if (web == null) {
+                        done.countDown()
+                        return@onActivity
+                    }
+                    web.evaluateJavascript(
+                        """(function(){
+                            if (!document.querySelector('.monaco-workbench')) return false;
+                            let input = document.getElementById('seven-ime-e2e');
+                            if (!input) {
+                                input = document.createElement('textarea');
+                                input.id = 'seven-ime-e2e';
+                                input.style.cssText =
+                                  'position:fixed;bottom:12px;left:12px;width:160px;height:42px;z-index:20';
+                                document.querySelector('.monaco-workbench').append(input);
+                            }
+                            input.focus();
+                            return document.activeElement === input;
+                        })()"""
+                    ) {
+                        result.set(it)
+                        done.countDown()
+                    }
+                }
+                if (done.await(5, TimeUnit.SECONDS) && result.get() == "true") {
+                    focused = true
+                    break
+                }
+                SystemClock.sleep(500)
+            }
+            assertTrue("Chromium could not focus its original WebView text input", focused)
+            var keyboardVisible = false
+            for (attempt in 0 until 35) {
+                scenario.onActivity { activity ->
+                    val insets = activity.window.decorView.rootWindowInsets
+                    if (insets?.isVisible(WindowInsets.Type.ime()) == true) {
+                        keyboardVisible = true
+                    }
+                }
+                if (keyboardVisible) break
+                SystemClock.sleep(500)
+            }
+            assertTrue(
+                "The trusted Code OSS WebView focus did not open the configured Android system keyboard",
+                keyboardVisible
+            )
+        }
+    }
+
 }

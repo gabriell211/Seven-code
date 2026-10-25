@@ -4,14 +4,18 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.content.res.ColorStateList
 import android.view.Gravity
+import android.view.MotionEvent
+import android.view.inputmethod.InputMethodManager
 import android.widget.FrameLayout
 import android.widget.ProgressBar
 import android.net.Uri
 import android.os.Bundle
+import android.os.SystemClock
 import android.os.Message
 import android.util.Base64
 import android.view.ViewGroup
@@ -83,6 +87,7 @@ class MainActivity : Activity() {
     private val sessionPattern = Regex("[A-Za-z0-9_-]{1,64}")
     private var showingConnectionError = false
     private var workbenchActive = false
+    private var lastImeRequestTime = 0L
     private val popupWindows = mutableSetOf<WebView>()
     private var pendingExternalConsent = false
     private var localServer: SevenLocalCodeOssServer? = null
@@ -211,7 +216,19 @@ class MainActivity : Activity() {
         // Do not retain a disconnected WebView when changing the trusted server.
         val previousWebView = if (::webView.isInitialized) webView else null
         trustedOrigin = parsed.first
-        webView = WebView(this)
+        webView = WebView(this).apply {
+            // The original Monaco editor uses an underlying HTML textarea.
+            // Android IME must connect to the actual focused WebView, not to a
+            // native dummy EditText that would swallow typed code.
+            isFocusable = true
+            isFocusableInTouchMode = true
+            setOnTouchListener { view, event ->
+                if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+                    view.requestFocusFromTouch()
+                }
+                false // Chromium still receives the original touch event.
+            }
+        }
         webView.settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true
@@ -351,6 +368,7 @@ class MainActivity : Activity() {
             }
         }
         setContentView(webView)
+        webView.requestFocus()
         previousWebView?.stopLoading()
         previousWebView?.destroy()
         showingConnectionError = false
@@ -426,6 +444,10 @@ class MainActivity : Activity() {
         if (!workbenchActive) return
         try {
             val data = JSONObject(raw)
+            if (data.optString("type") == "keyboard-request") {
+                showAndroidSystemIme()
+                return
+            }
             if (data.optString("type") == "github-device-request") {
                 handleGitHubDeviceRequest(data)
                 return
@@ -521,6 +543,31 @@ class MainActivity : Activity() {
         } catch (error: Exception) {
             // A malformed web message must not crash the Android workbench.
         }
+    }
+
+    /** Show the user's normal configured Android keyboard (IME) for Monaco,
+     * terminal, quick input, dialogs and text inputs inside the trusted WebView.
+     * The WebMessageListener rejects untrusted origins and child frames first.
+     */
+    private fun showAndroidSystemIme() {
+        if (!workbenchActive || !::webView.isInitialized ||
+            isFinishing || isDestroyed || !webView.isAttachedToWindow) return
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastImeRequestTime < 90L) return
+        lastImeRequestTime = now
+        val editorView = webView
+        editorView.isFocusableInTouchMode = true
+        editorView.requestFocus()
+        // The JS focus event precedes Chromium's input-connection update on
+        // some Android devices. Give its genuine textarea time to focus.
+        editorView.postDelayed({
+            if (workbenchActive && editorView === webView &&
+                editorView.hasFocus() && editorView.isAttachedToWindow &&
+                !isFinishing && !isDestroyed) {
+                val ime = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+                ime.showSoftInput(editorView, InputMethodManager.SHOW_IMPLICIT)
+            }
+        }, 110L)
     }
 
     private fun handleGitHubDeviceRequest(data: JSONObject) {
