@@ -7,6 +7,8 @@ on:
     paths:
       - ".github/workflows/seven-android-offline-web.yml"
       - ".seven/package-android-web.mjs"
+      - ".seven/android/localize-codeoss-web.mjs"
+      - ".seven/tests/android-localization.test.mjs"
       - ".seven/tests/android-system-ime.test.mjs"
       - "extensions/copilot/**"
       - ".seven/tests/android-copilot-chat-command.test.mjs"
@@ -31,6 +33,8 @@ on:
       - "src/vs/workbench/browser/sevenMobileTerminalBridge.ts"
       - ".github/workflows/seven-android-offline-web.yml"
       - ".seven/package-android-web.mjs"
+      - ".seven/android/localize-codeoss-web.mjs"
+      - ".seven/tests/android-localization.test.mjs"
       - ".seven/tests/android-system-ime.test.mjs"
       - ".seven/verify-android-web.mjs"
       - ".seven/tests/android-web-bundle.test.mjs"
@@ -90,11 +94,32 @@ jobs:
           test "$(stat -c %s extensions/github-authentication/dist/browser/extension.js)" -gt 15000
       - name: Compile ORIGINAL Code OSS web production workbench (NOT a mock)
         run: npm run gulp vscode-web-min
+      - name: Download and verify pinned MIT-licensed official pt-BR translations
+        env:
+          VSCODE_LOC_SHA: 62d5443b567022539ba6e8565b0f43f5f6b3682b
+          PTBR_BLOB_SHA: 97d55c2befdf7f606f399a8f5526b635d777c784
+          LICENSE_BLOB_SHA: 1adca5b75d5d39e0bf1e9a7c06c9a43a09b1f27e
+        run: |
+          set -euo pipefail
+          source_url="https://raw.githubusercontent.com/microsoft/vscode-loc/${VSCODE_LOC_SHA}"
+          curl -fsSL --retry 3 --proto '=https' --tlsv1.2 \
+            "${source_url}/i18n/vscode-language-pack-pt-BR/translations/main.i18n.json" \
+            -o "$RUNNER_TEMP/seven-code-pt-br-main.i18n.json"
+          test "$(git hash-object "$RUNNER_TEMP/seven-code-pt-br-main.i18n.json")" = "$PTBR_BLOB_SHA"
+          curl -fsSL --retry 3 --proto '=https' --tlsv1.2 \
+            "${source_url}/LICENSE.md" -o "$RUNNER_TEMP/seven-code-pt-br-LICENSE.md"
+          test "$(git hash-object "$RUNNER_TEMP/seven-code-pt-br-LICENSE.md")" = "$LICENSE_BLOB_SHA"
       - name: Embed complete compiled Web UI into Android assets
         run: |
           set -euo pipefail
           node .seven/package-android-web.mjs ../vscode-web
-          node --test .seven/tests/android-web-bundle.test.mjs .seven/tests/android-system-ime.test.mjs .seven/tests/android-copilot-chat-command.test.mjs .seven/tests/android-copilot-shell-tool.test.mjs .seven/tests/android-github-device-auth.test.mjs
+          node .seven/android/localize-codeoss-web.mjs \
+            mobile/android/app/src/main/assets/seven-web \
+            "$RUNNER_TEMP/seven-code-pt-br-main.i18n.json"
+          mkdir -p mobile/android/app/src/main/assets/seven-web/licenses
+          cp "$RUNNER_TEMP/seven-code-pt-br-LICENSE.md" \
+            mobile/android/app/src/main/assets/seven-web/licenses/vscode-loc-LICENSE.md
+          node --test .seven/tests/android-web-bundle.test.mjs .seven/tests/android-localization.test.mjs .seven/tests/android-system-ime.test.mjs .seven/tests/android-copilot-chat-command.test.mjs .seven/tests/android-copilot-shell-tool.test.mjs .seven/tests/android-github-device-auth.test.mjs
           test -s mobile/android/app/src/main/assets/seven-web/out/vs/workbench/workbench.web.main.internal.js
           test -s mobile/android/app/src/main/assets/seven-web/extensions/copilot-chat/dist/web.js
       - name: Build APK with Android native PTY and embedded Code OSS Web UI
