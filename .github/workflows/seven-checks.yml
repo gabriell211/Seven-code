@@ -33,6 +33,7 @@ jobs:
           node --experimental-strip-types --test .seven/tests/android-github-device-auth.test.mjs
           node --test .seven/tests/android-pty-process.test.mjs
           node --test .seven/tests/android-system-ime.test.mjs
+          node --test .seven/tests/android-preview-install.test.mjs
           node --test .seven/tests/android-localization.test.mjs
           node --test .seven/tests/release-qualification.test.mjs
           node --test .seven/tests/single-apk-release.test.mjs
