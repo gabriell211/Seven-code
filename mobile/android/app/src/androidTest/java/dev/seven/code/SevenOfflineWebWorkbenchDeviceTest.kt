@@ -8,6 +8,9 @@ import android.os.Build
 import android.view.WindowInsets
 import android.content.Context
 import android.view.inputmethod.InputMethodManager
+import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputConnection
+import android.text.InputType
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.assertTrue
@@ -194,6 +197,50 @@ class SevenOfflineWebWorkbenchDeviceTest {
                 "The trusted Code OSS WebView focus did not open the configured Android system keyboard",
                 keyboardVisible
             )
+            // Keyboard visibility does not imply its input reaches Chromium.
+            // Commit through the actual WebView InputConnection, then read DOM.
+            val connection = AtomicReference<InputConnection?>(null)
+            val inputType = AtomicReference<Int>(InputType.TYPE_NULL)
+            scenario.onActivity { activity ->
+                val root = activity.findViewById<android.view.ViewGroup>(android.R.id.content)
+                val web = root.getChildAt(0) as? WebView
+                val editorInfo = EditorInfo()
+                connection.set(web?.onCreateInputConnection(editorInfo))
+                inputType.set(editorInfo.inputType)
+            }
+            assertTrue("WebView has no editable Android InputConnection", connection.get() != null)
+            assertTrue("WebView InputConnection is TYPE_NULL despite visible IME",
+                inputType.get() != InputType.TYPE_NULL)
+            assertTrue("IME failed to commit text to Chromium",
+                connection.get()!!.commitText("SevenIME42", 1))
+            var textArrived = false
+            var lastValue = ""
+            for (attempt in 0 until 30) {
+                val done = CountDownLatch(1)
+                val result = AtomicReference<String>("")
+                scenario.onActivity { activity ->
+                    val root = activity.findViewById<android.view.ViewGroup>(android.R.id.content)
+                    val web = root.getChildAt(0) as? WebView
+                    if (web == null) {
+                        done.countDown()
+                        return@onActivity
+                    }
+                    web.evaluateJavascript("document.getElementById('seven-ime-e2e')?.value ?? ''") {
+                        result.set(it)
+                        done.countDown()
+                    }
+                }
+                if (done.await(5, TimeUnit.SECONDS)) {
+                    lastValue = result.get()
+                    if (lastValue.contains("SevenIME42")) {
+                        textArrived = true
+                        break
+                    }
+                }
+                SystemClock.sleep(200)
+            }
+            assertTrue("IME opened but text was not delivered to HTML input: $lastValue",
+                textArrived)
         }
     }
 

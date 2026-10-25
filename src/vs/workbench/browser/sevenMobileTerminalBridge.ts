@@ -29,7 +29,11 @@ if (host && typeof BroadcastChannel !== 'undefined') {
         host.postMessage(JSON.stringify({ type: 'keyboard-request' }));
     };
     const isTextInput = (element: Element | null): boolean =>
-        !!element && (element.matches('textarea, input:not([type="hidden"]), [contenteditable="true"], [role="textbox"]'));
+        !!element && element.matches(
+            'textarea:not([disabled]):not([readonly]),' +
+            'input:not([disabled]):not([readonly]):not([type="hidden"]),' +
+            '[contenteditable]:not([contenteditable="false"])'
+        );
     const onEditorFocus = (event: FocusEvent) => {
         if (event.target instanceof Element && isTextInput(event.target)) {
             postImeRequest();
@@ -42,9 +46,25 @@ if (host && typeof BroadcastChannel !== 'undefined') {
         const editingSurface = isTextInput(target) ||
             !!target.closest('.monaco-editor, .xterm, .quick-input-widget, .monaco-inputbox, .find-widget, .search-widget');
         if (!editingSurface) return;
-        // Code OSS often focuses Monaco's hidden textarea AFTER pointerup.
-        // Native will show the system IME against the same real WebView.
-        window.setTimeout(postImeRequest, 95);
+        // Code OSS may attach Monaco's hidden input after the touch is handled.
+        // Recover ONLY an existing input in the touched editor/terminal.
+        // Never create a fake EditText or route text through synthetic key events.
+        window.setTimeout(() => {
+            if (!isTextInput(document.activeElement)) {
+                const editor = target.closest('.monaco-editor, .xterm');
+                const originalInput = editor?.querySelector(
+                    'textarea.inputarea, textarea.xterm-helper-textarea'
+                );
+                if (originalInput instanceof HTMLElement && isTextInput(originalInput)) {
+                    originalInput.focus({ preventScroll: true });
+                }
+            }
+            // Showing IME with no editable document focus produces the exact
+            // symptom "keyboard opens but typing does nothing".
+            if (isTextInput(document.activeElement)) {
+                postImeRequest();
+            }
+        }, 95);
     };
     document.addEventListener('focusin', onEditorFocus, true);
     document.addEventListener('pointerup', onEditorPointer, true);
