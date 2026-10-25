@@ -22,6 +22,7 @@ for (const entry of [
   'assets/seven-web/extensions/copilot-chat/dist/web.js',
   'assets/seven-web/extensions/copilot-chat/LICENSE.txt',
   'assets/seven-web/extensions/github-authentication/package.json',
+  'assets/seven-web/extensions/github-authentication/dist/browser/extension.js',
   'lib/arm64-v8a/libsevenpty.so',
   'classes.dex',
 ]) {
@@ -45,10 +46,20 @@ assert.equal(copilotManifest.name, 'copilot-chat');
 assert.equal(copilotManifest.browser, './dist/web.js');
 assert.ok(!copilotManifest.main,
   'Android WebView cannot load the upstream Node-only Copilot entrypoint');
+const githubWorker = unzip(['-p', apk,
+  'assets/seven-web/extensions/github-authentication/dist/browser/extension.js']);
+assert.ok(githubWorker.length > 15000, 'GitHub auth Web Worker is missing');
+const githubManifest = JSON.parse(unzip(['-p', apk,
+  'assets/seven-web/extensions/github-authentication/package.json']).toString('utf8'));
+assert.equal(githubManifest.browser, './dist/browser/extension.js');
+assert.ok(!githubManifest.main);
 const metadata = JSON.parse(unzip(['-p', apk, 'assets/seven-web/bundle.json']).toString('utf8'));
 assert.equal(metadata.noNodeRequiredForUi, true);
 assert.equal(metadata.remoteNodeExtensions, false);
 assert.equal(metadata.copilotWebWorkerPackaged, true);
+assert.equal(metadata.githubAuthWebWorkerPackaged, true);
+assert.equal(metadata.githubDeviceFlowNativeBridge, true);
+assert.equal(metadata.githubAuthenticationE2EVerified, false);
 assert.equal(metadata.copilotNodeExtensionHostReady, false);
 assert.equal(metadata.copilotAuthenticationE2EVerified, false);
 console.log('Android APK contains compiled original Code OSS offline Web UI.');

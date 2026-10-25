@@ -24,6 +24,19 @@ if (host && typeof BroadcastChannel !== 'undefined') {
     const channel = new BroadcastChannel('seven-code-mobile-terminal-v1');
     const files = new BroadcastChannel('seven-code-mobile-files-v1');
     const ai = new BroadcastChannel('seven-code-mobile-ai-v1');
+    const github = new BroadcastChannel('seven-code-mobile-github-device-v1');
+    github.onmessage = event => {
+        const data: unknown = event.data;
+        if (!data || typeof data !== 'object' ||
+            !('type' in data) || data.type !== 'github-device-request' ||
+            !('requestId' in data) || typeof data.requestId !== 'string' ||
+            !/^[A-Za-z0-9_-]{1,64}$/.test(data.requestId) ||
+            !('op' in data) || !['begin', 'poll'].includes(String(data.op))) {
+            return;
+        }
+        host.postMessage(JSON.stringify(data));
+    };
+
     ai.onmessage = event => {
         const data: unknown = event.data;
         if (!data || typeof data !== 'object' || !('type' in data) ||
@@ -65,6 +78,12 @@ if (host && typeof BroadcastChannel !== 'undefined') {
         host.postMessage(JSON.stringify(data));
     };
     window.sevenNativeEvent = event => {
+        if (event && event.type === 'github-device-result' &&
+            typeof event.requestId === 'string' &&
+            /^[A-Za-z0-9_-]{1,64}$/.test(event.requestId)) {
+            github.postMessage(event);
+            return;
+        }
         if (event && event.type === 'ai-result' &&
             typeof event.requestId === 'string' && /^[a-zA-Z0-9_-]{1,64}$/.test(event.requestId)) {
             ai.postMessage(event);
@@ -85,6 +104,7 @@ if (host && typeof BroadcastChannel !== 'undefined') {
         channel.close();
         files.close();
         ai.close();
+        github.close();
     }, { once: true });
 }
 export {};

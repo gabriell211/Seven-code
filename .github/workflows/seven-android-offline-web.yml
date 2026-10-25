@@ -10,6 +10,10 @@ on:
       - "extensions/copilot/**"
       - ".seven/tests/android-copilot-chat-command.test.mjs"
       - "extensions/github-authentication/**"
+      - ".seven/tests/android-github-device-auth.test.mjs"
+      - ".seven/tests/android-copilot-chat-command.test.mjs"
+      - "extensions/seven-code-mobile-terminal/**"
+      - "src/vs/workbench/browser/sevenMobileTerminalBridge.ts"
       - ".seven/verify-android-web.mjs"
       - ".seven/tests/android-web-bundle.test.mjs"
       - "mobile/android/app/src/main/**"
@@ -19,6 +23,11 @@ on:
   pull_request:
     branches: [main]
     paths:
+      - "extensions/github-authentication/**"
+      - ".seven/tests/android-github-device-auth.test.mjs"
+      - ".seven/tests/android-copilot-chat-command.test.mjs"
+      - "extensions/seven-code-mobile-terminal/**"
+      - "src/vs/workbench/browser/sevenMobileTerminalBridge.ts"
       - ".github/workflows/seven-android-offline-web.yml"
       - ".seven/package-android-web.mjs"
       - ".seven/verify-android-web.mjs"
@@ -71,13 +80,19 @@ jobs:
           npm --prefix extensions/copilot run compile
           test -s extensions/copilot/dist/web.js
           test "$(stat -c %s extensions/copilot/dist/web.js)" -gt 100000
+      - name: Compile original GitHub authentication Web Worker with Android transport
+        run: |
+          set -euo pipefail
+          npm --prefix extensions/github-authentication run compile-web
+          test -s extensions/github-authentication/dist/browser/extension.js
+          test "$(stat -c %s extensions/github-authentication/dist/browser/extension.js)" -gt 15000
       - name: Compile ORIGINAL Code OSS web production workbench (NOT a mock)
         run: npm run gulp vscode-web-min
       - name: Embed complete compiled Web UI into Android assets
         run: |
           set -euo pipefail
           node .seven/package-android-web.mjs ../vscode-web
-          node --test .seven/tests/android-web-bundle.test.mjs .seven/tests/android-copilot-chat-command.test.mjs .seven/tests/android-copilot-shell-tool.test.mjs
+          node --test .seven/tests/android-web-bundle.test.mjs .seven/tests/android-copilot-chat-command.test.mjs .seven/tests/android-copilot-shell-tool.test.mjs .seven/tests/android-github-device-auth.test.mjs
           test -s mobile/android/app/src/main/assets/seven-web/out/vs/workbench/workbench.web.main.internal.js
           test -s mobile/android/app/src/main/assets/seven-web/extensions/copilot-chat/dist/web.js
       - name: Build APK with Android native PTY and embedded Code OSS Web UI
@@ -99,6 +114,9 @@ jobs:
           profile: pixel_5
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           script: |
+            # reactivecircus executes each script line in a separate shell.
+            # Gradle instrumentation itself checks compositor pixel diversity,
+            # screenshots and original Code OSS UI; preserve its real exit code.
             gradle -p mobile/android :app:connectedDebugAndroidTest --no-daemon --stacktrace -Pandroid.testInstrumentationRunnerArguments.class=dev.seven.code.SevenOfflineWebWorkbenchDeviceTest
       - name: Attach APK ONLY after actual on-emulator Web Workbench test passes
         run: |

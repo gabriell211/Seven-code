@@ -25,8 +25,15 @@ test('Android packages ORIGINAL static Code OSS web workbench with no URL prompt
       version: '0.72.0', main: './dist/extension.js', contributes: { commands: [] },
     }));
     writeFileSync(join(copilot, 'LICENSE.txt'), 'MIT License fixture for build test');
+    const github = join(dir, 'github-fixture');
+    mkdirSync(join(github, 'dist/browser'), { recursive: true });
+    writeFileSync(join(github, 'dist/browser/extension.js'), Buffer.alloc(15_001, 33));
+    writeFileSync(join(github, 'package.json'), JSON.stringify({
+      name: 'github-authentication', publisher: 'vscode',
+      browser: './dist/browser/extension.js', main: './out/extension.js'
+    }));
     execFileSync(process.execPath, [
-      '.seven/package-android-web.mjs', compiled, destination, copilot,
+      '.seven/package-android-web.mjs', compiled, destination, copilot, github,
     ], { encoding: 'utf8' });
     const html = readFileSync(join(destination, 'index.html'), 'utf8');
     const bootstrap = readFileSync(join(destination, 'bootstrap.js'), 'utf8');
@@ -43,6 +50,12 @@ test('Android packages ORIGINAL static Code OSS web workbench with no URL prompt
     assert.match(bootstrap, /seven-code-mobile-terminal/);
     assert.match(bootstrap, /copilot-chat/);
     assert.match(bootstrap, /github-authentication/);
+    const githubManifest = JSON.parse(readFileSync(join(destination,
+      'extensions/github-authentication/package.json'), 'utf8'));
+    assert.equal(githubManifest.browser, './dist/browser/extension.js');
+    assert.equal(githubManifest.main, undefined);
+    assert.ok(existsSync(join(destination,
+      'extensions/github-authentication/dist/browser/extension.js')));
     const copilotManifest = JSON.parse(readFileSync(
       join(destination, 'extensions/copilot-chat/package.json'), 'utf8'
     ));
@@ -56,6 +69,9 @@ test('Android packages ORIGINAL static Code OSS web workbench with no URL prompt
     assert.equal(metadata.noNodeRequiredForUi, true);
     assert.equal(metadata.remoteNodeExtensions, false);
     assert.equal(metadata.copilotWebWorkerPackaged, true);
+    assert.equal(metadata.githubAuthWebWorkerPackaged, true);
+    assert.equal(metadata.githubDeviceFlowNativeBridge, true);
+    assert.equal(metadata.githubAuthenticationE2EVerified, false);
     assert.equal(metadata.copilotNodeExtensionHostReady, false);
     assert.equal(metadata.copilotAuthenticationE2EVerified, false);
   } finally {

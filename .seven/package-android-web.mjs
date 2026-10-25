@@ -10,6 +10,7 @@ import { join, resolve } from 'node:path';
 const buildRoot = resolve(process.argv[2] ?? '../vscode-web');
 const destination = resolve(process.argv[3] ?? 'mobile/android/app/src/main/assets/seven-web');
 const copilotSource = resolve(process.argv[4] ?? 'extensions/copilot');
+const githubSource = resolve(process.argv[5] ?? 'extensions/github-authentication');
 const base = '/assets/seven-web';
 const jsEntrypoint = 'out/vs/workbench/workbench.web.main.internal.js';
 const cssEntrypoint = 'out/vs/workbench/workbench.web.main.internal.css';
@@ -104,6 +105,29 @@ copilotManifest.browser = './dist/web.js';
 copilotManifest.extensionKind = ['ui'];
 writeFileSync(join(copilotDest, 'package.json'), JSON.stringify(copilotManifest, null, 2) + '\n');
 
+// Embed the verified ORIGINAL GitHub authentication browser extension.
+const githubWorker = join(githubSource, 'dist/browser/extension.js');
+const githubManifestFile = join(githubSource, 'package.json');
+if (!existsSync(githubWorker) || !existsSync(githubManifestFile) ||
+    statSync(githubWorker).size < 15000) {
+  throw new Error('GitHub browser authentication worker must be compiled first');
+}
+const githubManifest = JSON.parse(readFileSync(githubManifestFile, 'utf8'));
+if (githubManifest.name !== 'github-authentication' ||
+    githubManifest.publisher !== 'vscode' ||
+    githubManifest.browser !== './dist/browser/extension.js') {
+  throw new Error('Unexpected GitHub authentication source');
+}
+delete githubManifest.main;
+const githubDest = join(destination, 'extensions/github-authentication');
+rmSync(githubDest, { recursive: true, force: true });
+mkdirSync(join(githubDest, 'dist/browser'), { recursive: true });
+cpSync(githubWorker, join(githubDest, 'dist/browser/extension.js'));
+for (const name of ['images', 'package.nls.json', 'LICENSE.txt']) {
+  const file = join(githubSource, name);
+  if (existsSync(file)) cpSync(file, join(githubDest, name), { recursive: true });
+}
+writeFileSync(join(githubDest, 'package.json'), JSON.stringify(githubManifest, null, 2) + '\n');
 for (const notice of ['LICENSE.txt', 'ThirdPartyNotices.txt']) {
   if (!existsSync(resolve(notice))) throw new Error('Missing Code OSS notice: ' + notice);
   cpSync(resolve(notice), join(destination, notice));
@@ -182,6 +206,9 @@ writeFileSync(join(destination, 'bundle.json'), JSON.stringify({
   remoteNodeExtensions: false,
   nativeAndroidTerminalExtension: true,
   copilotWebWorkerPackaged: true,
+  githubAuthWebWorkerPackaged: true,
+  githubDeviceFlowNativeBridge: true,
+  githubAuthenticationE2EVerified: false,
   copilotNodeExtensionHostReady: false,
   copilotAuthenticationE2EVerified: false,
   noNodeRequiredForUi: true,

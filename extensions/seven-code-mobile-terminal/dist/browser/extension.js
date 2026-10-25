@@ -418,6 +418,30 @@ class SevenAndroidWorkspaceContext {
 
 // Preserve the original Code OSS Chat UI. Never replace GitHub Copilot with a
 // mock response or silently redirect code context to a third-party chatbot.
+// Use Code OSS's original registered GitHub AuthenticationProvider; no
+// homegrown login state, OAuth access token cache or external server.
+async function signInToGitHub() {
+    if (!vscode.authentication?.getSession) {
+        await vscode.window.showErrorMessage('O provedor GitHub original não está disponível neste Workbench.');
+        return;
+    }
+    try {
+        const session = await vscode.authentication.getSession(
+            'github', ['read:user', 'user:email'], { createIfNone: true }
+        );
+        if (session?.account?.label) {
+            await vscode.window.showInformationMessage(
+                'GitHub conectado: ' + session.account.label + '. Abra o Copilot Chat para conferir a assinatura.'
+            );
+        }
+    } catch {
+        await vscode.window.showErrorMessage(
+            'Não foi possível concluir o login GitHub. Verifique o código de dispositivo, ' +
+            'a autorização no navegador e as configurações OAuth do aplicativo.'
+        );
+    }
+}
+
 async function openCopilotChat() {
     await vscode.commands.executeCommand('workbench.action.chat.open');
     if (!vscode.extensions?.getExtension?.('GitHub.copilot-chat')) {
@@ -459,6 +483,9 @@ async function activate(context) {
     if (typeof vscode.commands?.registerCommand === 'function') {
         context.subscriptions.push(vscode.commands.registerCommand(
             'sevenCode.openCopilotChat', openCopilotChat
+        ));
+        context.subscriptions.push(vscode.commands.registerCommand(
+            'sevenCode.githubSignIn', signInToGitHub
         ));
         context.subscriptions.push(vscode.commands.registerCommand(
             'sevenCode.copilotStatus', showCopilotStatus
