@@ -1,0 +1,30 @@
+name: Seven Code Android - LIVE GitHub OAuth device protocol (no login)
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/seven-github-oauth-live-probe.yml"
+      - ".seven/android/probe-github-real-device-flow.py"
+      - "extensions/github-authentication/src/config.ts"
+      - "extensions/github-authentication/src/browser/fetch.ts"
+      - "mobile/android/app/src/main/java/dev/seven/code/SevenGitHubDeviceFlow.kt"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/seven-github-oauth-live-probe.yml"
+      - ".seven/android/probe-github-real-device-flow.py"
+      - "extensions/github-authentication/src/config.ts"
+
+permissions:
+  contents: read
+
+jobs:
+  github-device-flow-real-network:
+    name: Probe real github.com OAuth endpoints WITHOUT approving a user
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate network handshake against actual GitHub OAuth
+        run: python3 .seven/android/probe-github-real-device-flow.py
