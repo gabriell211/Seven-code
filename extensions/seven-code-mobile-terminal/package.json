@@ -18,7 +18,9 @@
     "onCommand:sevenCode.openAndroidFolder",
     "onCommand:sevenCode.openCopilotChat",
     "onCommand:sevenCode.copilotStatus",
-    "onCommand:sevenCode.githubSignIn"
+    "onCommand:sevenCode.githubSignIn",
+    "onCommand:sevenCode.copilotLiveAcceptance",
+    "onCommand:sevenCode.copilotAgentAcceptance"
   ],
   "capabilities": {
     "virtualWorkspaces": true,
@@ -58,6 +60,16 @@
       {
         "command": "sevenCode.githubSignIn",
         "title": "Seven Code: Entrar com GitHub para Copilot",
+        "category": "Seven Code"
+      },
+      {
+        "command": "sevenCode.copilotLiveAcceptance",
+        "title": "Seven Code: Homologar GitHub + resposta REAL do Copilot",
+        "category": "Seven Code"
+      },
+      {
+        "command": "sevenCode.copilotAgentAcceptance",
+        "title": "Seven Code: Homologar Copilot Agent com terminal Android",
         "category": "Seven Code"
       }
     ],

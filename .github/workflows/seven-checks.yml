@@ -24,6 +24,7 @@ jobs:
           node --experimental-strip-types --test mobile/remote/seven-workspace-client.test.mjs
           node --test .seven/tests/mobile-workbench.test.mjs
           node --check extensions/seven-code-mobile-terminal/dist/browser/extension.js
+          node --test .seven/tests/android-copilot-chat-command.test.mjs
           node --test .seven/tests/android-copilot-shell-tool.test.mjs
           node --test .seven/tests/android-copilot-context.test.mjs
           node --test .seven/tests/android-phone-workspace.test.mjs

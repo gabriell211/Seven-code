@@ -30,3 +30,19 @@ test('Preserves local Android terminal and approved workspace tool while enablin
   assert.ok(manifest.contributes.languageModelTools.some(t => t.name === 'seven_code_run_android_shell'));
   assert.ok(manifest.contributes.languageModelTools.some(t => t.name === 'seven_code_read_android_workspace_file'));
 });
+
+test('Live Copilot acceptance requires real GitHub /user and streamed real model response', () => {
+  const commands = manifest.contributes.commands;
+  assert.ok(commands.some(c => c.command === 'sevenCode.copilotLiveAcceptance'));
+  assert.ok(commands.some(c => c.command === 'sevenCode.copilotAgentAcceptance'));
+  assert.ok(manifest.activationEvents.includes('onCommand:sevenCode.copilotLiveAcceptance'));
+  assert.match(source, /https:\/\/api\.github\.com\/user/);
+  assert.match(source, /createIfNone: false/);
+  assert.match(source, /vscode\.lm\.selectChatModels\(\{ vendor: 'copilot' \}\)/);
+  assert.match(source, /candidate\.vendor === 'copilot'/);
+  assert.match(source, /model\.sendRequest/);
+  assert.match(source, /for await \(const chunk of response\.text\)/);
+  assert.match(source, /sevenCode\.copilotAgentAcceptance/);
+  assert.match(source, /SEVEN_CODE_AGENT_REAL_OK/);
+  assert.doesNotMatch(source, /FAKE[_-]COPILOT|mockResponse|fakeCompletion/i);
+});
