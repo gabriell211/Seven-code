@@ -39,8 +39,8 @@ test('Linux-only development smoke REALLY forks a Node child and receives IPC (N
   const fakeVsCode = { commands: { registerCommand: () => ({ dispose() {} }) },
     window: { showInformationMessage: async () => undefined } };
   const factory = vm.runInNewContext(
-    '(function(require,module,exports,__dirname,process,setTimeout,clearTimeout) {\\n' +
-      source + '\\n})',
+    '(function(require,module,exports,__dirname,process,setTimeout,clearTimeout) {\n' +
+      source + '\n})',
     { console }
   );
   factory(name => name === 'vscode' ? fakeVsCode : require(name),
