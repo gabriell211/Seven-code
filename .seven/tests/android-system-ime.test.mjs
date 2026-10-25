@@ -59,7 +59,7 @@ function render({ trusted }) {
         postMessage() {}
     }
     const menus = [];
-    const MenuId = { AccountsContext: 'AccountsContext', EditorTitle: 'EditorTitle' };
+    const MenuId = { AccountsContext: 'AccountsContext', EditorTitle: 'EditorTitle', ChatTitleBarMenu: 'ChatTitleBarMenu' };
     const MenuRegistry = {
         appendMenuItem(id, item) {
             const entry = { id, item, disposed: false };
@@ -118,7 +118,9 @@ test('real Android Accounts and Editor ellipsis menus expose actionable commands
     assert.deepEqual(app.menus.map(menu => [menu.id, menu.item.command.id]), [
         ['AccountsContext', 'sevenCode.githubSignIn'],
         ['EditorTitle', 'sevenCode.openAndroidFolder'],
-        ['EditorTitle', 'sevenCode.newAndroidFile']
+        ['EditorTitle', 'sevenCode.newAndroidFile'],
+        ['ChatTitleBarMenu', 'sevenCode.githubSignIn'],
+        ['ChatTitleBarMenu', 'sevenCode.copilotStatus']
     ]);
     app.listeners.get('pagehide')();
     assert.ok(app.menus.every(menu => menu.disposed));
