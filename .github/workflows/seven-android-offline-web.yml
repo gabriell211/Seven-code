@@ -114,7 +114,21 @@ jobs:
           profile: pixel_5
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           script: |
+            set +e
             gradle -p mobile/android :app:connectedDebugAndroidTest --no-daemon --stacktrace -Pandroid.testInstrumentationRunnerArguments.class=dev.seven.code.SevenOfflineWebWorkbenchDeviceTest
+            result=$?
+            # Capture actual emulator compositor bytes even when visual
+            # acceptance fails; never replace the editor screenshot with a mock.
+            adb exec-out run-as dev.seven.code cat files/seven-code-portrait.png > "$GITHUB_WORKSPACE/seven-code-device-render.png" || true
+            exit "$result"
+      - name: Attach real Android compositor screenshot for review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SevenCode-Android-Web-render-evidence
+          path: seven-code-device-render.png
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Attach APK ONLY after actual on-emulator Web Workbench test passes
         run: |
           mkdir -p "$RUNNER_TEMP/offline-web-apk"
