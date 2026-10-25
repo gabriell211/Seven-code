@@ -130,6 +130,7 @@ async function hasNativeHost() {
             if (settled) return;
             settled = true;
             clearTimeout(timer);
+            repeats.forEach(clearTimeout);
             channel.close();
             resolve(value);
         }
@@ -139,7 +140,14 @@ async function hasNativeHost() {
                 finish(true);
             }
         };
-        const timer = setTimeout(() => finish(false), 1500);
+        // Real Android WebView and Web Worker can initialize at different speeds.
+        // Never disable file/picker commands just because first ping arrived early.
+        const repeats = [
+            setTimeout(() => channel.postMessage({ type: 'probe', nonce }), 500),
+            setTimeout(() => channel.postMessage({ type: 'probe', nonce }), 1500),
+            setTimeout(() => channel.postMessage({ type: 'probe', nonce }), 3200)
+        ];
+        const timer = setTimeout(() => finish(false), 8000);
         channel.postMessage({ type: 'probe', nonce });
     });
 }
@@ -571,6 +579,142 @@ async function showCopilotStatus() {
     );
 }
 
+// Android SAF requires no READ_EXTERNAL_STORAGE or MANAGE_EXTERNAL_STORAGE.
+// The system asks for permission when ACTION_OPEN_DOCUMENT_TREE is launched;
+// the grant is limited to the chosen folder and is persisted by Android.
+const MOBILE_FOLDER = () => vscode.Uri.from({ scheme: FILES_SCHEME, path: '/' });
+
+function validFileName(value) {
+    return typeof value === 'string' && value.trim() === value &&
+        value.length > 0 && value.length <= 255 &&
+        value !== '.' && value !== '..' &&
+        !value.includes('/') && !value.includes('\\') &&
+        !/[\x00-\x1f]/.test(value);
+}
+
+async function ensureAndroidFolder(files) {
+    try {
+        return await files.request('status');
+    } catch {
+        const action = await vscode.window.showInformationMessage(
+            'Para criar ou abrir arquivos, o Seven Code precisa que você escolha uma pasta do celular. ' +
+            'O Android libera acesso somente à pasta escolhida.',
+            'Selecionar pasta'
+        );
+        if (action !== 'Selecionar pasta') return null;
+        return await files.request('select', '/', {}, undefined, 180000);
+    }
+}
+
+async function mountAndroidFolder(folderName) {
+    const uri = MOBILE_FOLDER();
+    const folders = vscode.workspace.workspaceFolders || [];
+    const alreadyMounted = folders.some(f => f.uri.scheme === FILES_SCHEME);
+    if (alreadyMounted) return;
+    const canMount = typeof vscode.workspace.updateWorkspaceFolders === 'function';
+    if (canMount) {
+        const mounted = vscode.workspace.updateWorkspaceFolders(
+            folders.length, 0, { uri, name: folderName || 'Arquivos do celular' }
+        );
+        if (mounted) return;
+    }
+    // In standalone Web Workbench a virtual folder can still be opened as a
+    // workspace URI; never silently swallow an unsupported operation.
+    await vscode.commands.executeCommand('vscode.openFolder', uri, false);
+}
+
+async function openAndroidFolder(files) {
+    try {
+        const result = await files.request('select', '/', {}, undefined, 180000);
+        await mountAndroidFolder(result.folder);
+        await vscode.commands.executeCommand('workbench.view.explorer');
+        await vscode.window.showInformationMessage(
+            'Pasta autorizada: ' + (result.folder || 'Arquivos do celular') +
+            '. O acesso é limitado à pasta escolhida.'
+        );
+    } catch (error) {
+        await vscode.window.showErrorMessage('Não foi possível abrir a pasta Android: ' +
+            String(error?.message || error).slice(0, 180));
+    }
+}
+
+async function newAndroidItem(files, directory) {
+    try {
+        const folder = await ensureAndroidFolder(files);
+        if (!folder) return;
+        await mountAndroidFolder(folder.folder);
+        const name = await vscode.window.showInputBox({
+            title: directory ? 'Nova pasta no celular' : 'Novo arquivo no celular',
+            placeHolder: directory ? 'ex.: meu-projeto' : 'ex.: main.ts',
+            prompt: 'Será criado na pasta do celular que você autorizou.',
+            ignoreFocusOut: true,
+            validateInput: text => validFileName(text) ? null : 'Informe um nome válido, sem / ou \\ e sem caracteres de controle.'
+        });
+        if (name === undefined) return;
+        if (!validFileName(name)) throw new Error('Nome inválido.');
+        const uri = vscode.Uri.joinPath(MOBILE_FOLDER(), name);
+        // Both APIs call the same original FileSystemProvider, Android SAF and
+        // actual device I/O. No fake "file created" toast or URL guessing.
+        await vscode.workspace.fs.stat(uri).then(
+            () => { throw new Error('Já existe um arquivo ou pasta com esse nome.'); },
+            error => { if (!String(error).includes('Arquivo não encontrado')) throw error; }
+        );
+        if (directory) {
+            await vscode.workspace.fs.createDirectory(uri);
+        } else {
+            await vscode.workspace.fs.writeFile(uri, new Uint8Array(0));
+            await vscode.commands.executeCommand('vscode.open', uri);
+        }
+        await vscode.window.showInformationMessage(
+            (directory ? 'Pasta' : 'Arquivo') + ' criado no celular: ' + name
+        );
+    } catch (error) {
+        await vscode.window.showErrorMessage('Falha ao criar no Android: ' +
+            String(error?.message || error).slice(0, 180));
+    }
+}
+
+async function openAndroidFile(files) {
+    try {
+        const folder = await ensureAndroidFolder(files);
+        if (!folder) return;
+        await mountAndroidFolder(folder.folder);
+        let path = '/';
+        for (;;) {
+            const reply = await files.request('list', path);
+            const entries = reply.entries || [];
+            const picks = entries.map(entry => ({
+                label: (entry.type === 'directory' ? '$(folder) ' : '$(file) ') + entry.name,
+                description: entry.type === 'directory' ? 'Pasta' : 'Arquivo',
+                filename: entry.name, directory: entry.type === 'directory'
+            }));
+            if (path !== '/') picks.unshift({
+                label: '$(arrow-up) Voltar', description: path,
+                filename: '..', directory: true
+            });
+            const chosen = await vscode.window.showQuickPick(picks, {
+                title: 'Abrir arquivo do celular',
+                placeHolder: 'Escolha um arquivo da pasta autorizada',
+                matchOnDescription: true
+            });
+            if (!chosen) return;
+            if (chosen.filename === '..') {
+                path = path.slice(0, path.lastIndexOf('/')) || '/';
+            } else if (chosen.directory) {
+                path = (path === '/' ? '' : path) + '/' + chosen.filename;
+            } else {
+                await vscode.commands.executeCommand('vscode.open',
+                    vscode.Uri.from({ scheme: FILES_SCHEME,
+                        path: (path === '/' ? '' : path) + '/' + chosen.filename }));
+                return;
+            }
+        }
+    } catch (error) {
+        await vscode.window.showErrorMessage('Não foi possível abrir arquivo Android: ' +
+            String(error?.message || error).slice(0, 180));
+    }
+}
+
 async function activate(context) {
     if (!(await hasNativeHost())) return;
     if (typeof vscode.workspace?.registerFileSystemProvider === 'function' &&
@@ -580,12 +724,18 @@ async function activate(context) {
         context.subscriptions.push(vscode.workspace.registerFileSystemProvider(FILES_SCHEME, files, {
             isCaseSensitive: true, isReadonly: false
         }));
-        context.subscriptions.push(vscode.commands.registerCommand('sevenCode.openAndroidFolder', async () => {
-            await files.request('select', '/', {}, undefined, 180000);
-            // vscode.openFolder uses the original Code OSS workspace implementation.
-            await vscode.commands.executeCommand('vscode.openFolder',
-                vscode.Uri.from({ scheme: FILES_SCHEME, path: '/' }), false);
-        }));
+        context.subscriptions.push(vscode.commands.registerCommand(
+            'sevenCode.openAndroidFolder', () => openAndroidFolder(files)
+        ));
+        context.subscriptions.push(vscode.commands.registerCommand(
+            'sevenCode.openAndroidFile', () => openAndroidFile(files)
+        ));
+        context.subscriptions.push(vscode.commands.registerCommand(
+            'sevenCode.newAndroidFile', () => newAndroidItem(files, false)
+        ));
+        context.subscriptions.push(vscode.commands.registerCommand(
+            'sevenCode.newAndroidFolder', () => newAndroidItem(files, true)
+        ));
     }
     if (typeof vscode.commands?.registerCommand === 'function') {
         context.subscriptions.push(vscode.commands.registerCommand(

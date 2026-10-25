@@ -25,6 +25,10 @@ function harness() {
     const files = new Map([['/hello.txt', new TextEncoder().encode('olá mundo')]]);
     const folders = new Set(['/']);
     const drafts = new Map();
+    let authorized = false;
+    const workspaceFolders = [];
+    const pickQueue = [];
+    const inputQueue = [];
     const actions = [];
     const providers = new Map();
     const commands = new Map();
@@ -44,7 +48,8 @@ function harness() {
         let error = null;
         try {
             switch (msg.op) {
-                case 'select': value = { folder: 'Projetos' }; break;
+                case 'select': authorized = true; value = { folder: 'Projetos' }; break;
+                case 'status': if (!authorized) throw Error('Escolha uma pasta do celular'); value = { folder: 'Projetos' }; break;
                 case 'stat':
                     if (folders.has(msg.path)) value = { type: 'directory', size: 0, mtime: 0 };
                     else if (files.has(msg.path)) value = { type: 'file', size: files.get(msg.path).length, mtime: 0 };
@@ -107,14 +112,25 @@ function harness() {
         FileType: { File: 1, Directory: 2 },
         FileChangeType: { Changed: 1, Created: 2, Deleted: 3 },
         Disposable: class { constructor(fn) { this.dispose = fn; } },
-        Uri: { from: x => x },
+        Uri: { from: x => x, joinPath: (root, name) => ({ scheme: root.scheme, path: root.path.replace(/\/$/, '') + '/' + name }) },
         FileSystemError: Object.fromEntries(
             ['FileExists', 'FileNotFound', 'FileIsADirectory', 'Unavailable'].map(type =>
                 [type, value => new Error(type + ': ' + (value?.path || value))])
         ),
         workspace: {
+            workspaceFolders,
+            updateWorkspaceFolders: (index, remove, ...items) => {
+                workspaceFolders.splice(index, remove, ...items.map(x => ({ uri: x.uri, name: x.name })));
+                return true;
+            },
             registerFileSystemProvider: (scheme, provider) => {
                 providers.set(scheme, provider); return { dispose() {} };
+            },
+            fs: {
+                stat: uri => providers.get('sevenmobile').stat(uri),
+                writeFile: (uri, bytes) => providers.get('sevenmobile').writeFile(uri, bytes,
+                    { create: true, overwrite: false }),
+                createDirectory: uri => providers.get('sevenmobile').createDirectory(uri),
             }
         },
         commands: {
@@ -122,7 +138,14 @@ function harness() {
             executeCommand: async (...args) => messages.push(args)
         },
         window: {
-            registerTerminalProfileProvider: () => ({ dispose() {} })
+            registerTerminalProfileProvider: () => ({ dispose() {} }),
+            showInformationMessage: async msg => { messages.push(['info', msg]); return 'Selecionar pasta'; },
+            showErrorMessage: async msg => { messages.push(['error', msg]); },
+            showInputBox: async () => inputQueue.shift(),
+            showQuickPick: async options => {
+                const name = pickQueue.shift();
+                return options.find(option => option.filename === name);
+            }
         }
     };
     const module = { exports: {} };
@@ -138,7 +161,10 @@ function harness() {
         activate: () => module.exports.activate({ subscriptions: [] }),
         provider: () => providers.get('sevenmobile'),
         open: () => commands.get('sevenCode.openAndroidFolder')?.(),
-        files, actions, messages,
+        command: (name) => commands.get(name)?.(),
+        input: text => inputQueue.push(text),
+        choose: name => pickQueue.push(name),
+        files, folders, actions, messages, workspaceFolders,
         close: () => { nativeTerminal.close(); nativeFiles.close(); providers.get('sevenmobile')?.dispose(); }
     };
 }
@@ -160,9 +186,10 @@ test('original Code OSS opens the authorized Android folder without choosing a s
     assert.ok(app.provider(), 'original FileSystemProvider must register');
     await app.open();
     assert.equal(app.actions.find(x => x.op === 'select')?.type, 'fs-request');
-    assert.equal(app.messages[0][0], 'vscode.openFolder');
-    assert.equal(app.messages[0][1].scheme, 'sevenmobile');
-    assert.equal(app.messages[0][1].path, '/');
+    assert.equal(app.workspaceFolders.length, 1);
+    assert.equal(app.workspaceFolders[0].uri.scheme, 'sevenmobile');
+    assert.equal(app.workspaceFolders[0].uri.path, '/');
+    assert.ok(app.messages.some(x => x[0] === 'workbench.view.explorer'));
     app.close();
 });
 
@@ -192,5 +219,51 @@ test('remote workspace never silently creates a missing phone file when create i
         new TextEncoder().encode('secret'), { create: false, overwrite: true }), /FileNotFound/);
     assert.equal(app.files.has('/not-found.txt'), false);
     assert.equal(app.actions.filter(x => x.op === 'write-begin').length, 0);
+    app.close();
+});
+
+test('new Android file opens the native picker, persists a real zero-byte file and opens the editor', async () => {
+    const app = harness();
+    await app.activate();
+    app.input('main.ts');
+    await app.command('sevenCode.newAndroidFile');
+    assert.ok(app.actions.some(x => x.op === 'select'), 'permission must be requested via native SAF');
+    assert.ok(app.actions.some(x => x.op === 'write-begin' && x.path === '/main.ts'));
+    assert.ok(app.actions.some(x => x.op === 'write-commit'));
+    assert.equal(app.files.get('/main.ts')?.length, 0);
+    assert.ok(app.messages.some(x => x[0] === 'vscode.open' && x[1].path === '/main.ts'));
+    app.close();
+});
+
+test('Android folder creates directories through SAF and reuses an existing permission grant', async () => {
+    const app = harness();
+    await app.activate();
+    await app.open();
+    const before = app.actions.filter(x => x.op === 'select').length;
+    app.input('src');
+    await app.command('sevenCode.newAndroidFolder');
+    assert.ok(app.folders.has('/src'));
+    assert.equal(app.actions.filter(x => x.op === 'select').length, before);
+    app.close();
+});
+
+test('open Android file enumerates SAF directory and opens an actual selected file', async () => {
+    const app = harness();
+    await app.activate();
+    app.choose('hello.txt');
+    await app.command('sevenCode.openAndroidFile');
+    assert.ok(app.actions.some(x => x.op === 'select'));
+    assert.ok(app.actions.some(x => x.op === 'list' && x.path === '/'));
+    assert.ok(app.messages.some(x => x[0] === 'vscode.open' && x[1].path === '/hello.txt'));
+    app.close();
+});
+
+test('Android file creation refuses traversal names and never writes unauthorized paths', async () => {
+    const app = harness();
+    await app.activate();
+    app.input('../outside.ts');
+    await app.command('sevenCode.newAndroidFile');
+    assert.ok(!app.actions.some(x => x.op === 'write-begin'));
+    assert.ok(app.messages.some(x => x[0] === 'error'));
     app.close();
 });

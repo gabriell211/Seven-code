@@ -899,6 +899,16 @@ function onErrorWithRetry(notificationService: INotificationService, error: unkn
 }
 
 async function openExplorerAndCreate(accessor: ServicesAccessor, isFolder: boolean): Promise<void> {
+    // Code OSS Web's generic file-system picker cannot grant Android storage.
+    // Route the original Explorer "New File/New Folder" buttons through SAF,
+    // preserving the original behavior for Windows, macOS, Linux and browsers.
+    if (typeof window !== 'undefined' &&
+        !!(window as Window & { SevenTerminalNative?: { postMessage(value: string): void } }).SevenTerminalNative) {
+        const commandService = accessor.get(ICommandService);
+        await commandService.executeCommand(isFolder ?
+            'sevenCode.newAndroidFolder' : 'sevenCode.newAndroidFile');
+        return;
+    }
 	const explorerService = accessor.get(IExplorerService);
 	const fileService = accessor.get(IFileService);
 	const configService = accessor.get(IConfigurationService);

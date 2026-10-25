@@ -5,6 +5,11 @@ import android.app.AlertDialog
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.graphics.Bitmap
+import android.graphics.Color
+import android.content.res.ColorStateList
+import android.view.Gravity
+import android.widget.FrameLayout
+import android.widget.ProgressBar
 import android.net.Uri
 import android.os.Bundle
 import android.os.Message
@@ -112,11 +117,53 @@ class MainActivity : Activity() {
     }
 
     private fun startLocalWorkbench() {
-        setContentView(TextView(this).apply {
-            text = "Seven Code\n\nIniciando o editor Code OSS no celular..."
-            textSize = 20f
-            setPadding(32, 64, 32, 32)
+        // Legacy self-hosted Code OSS builds also get a genuine native,
+        // animated loading screen. No static image or simulated progress.
+        val density = resources.displayMetrics.density
+        val surface = FrameLayout(this).apply {
+            setBackgroundColor(Color.rgb(11, 16, 26))
+        }
+        val column = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(24, 24, 24, 24)
+        }
+        column.addView(TextView(this).apply {
+            text = "7"
+            gravity = Gravity.CENTER
+            textSize = 65f
+            setTextColor(Color.rgb(66, 239, 196))
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            contentDescription = "Seven Code"
+        }, LinearLayout.LayoutParams((96 * density).toInt(), (98 * density).toInt()))
+        column.addView(TextView(this).apply {
+            text = "SEVEN CODE"
+            textSize = 25f
+            letterSpacing = 0.13f
+            gravity = Gravity.CENTER
+            setTextColor(Color.rgb(239, 248, 255))
+            setTypeface(null, android.graphics.Typeface.BOLD)
         })
+        column.addView(ProgressBar(this).apply {
+            isIndeterminate = true
+            indeterminateTintList = ColorStateList.valueOf(Color.rgb(66, 239, 196))
+            contentDescription = "Carregando o editor Code OSS"
+        }, LinearLayout.LayoutParams(
+            (56 * density).toInt(), (56 * density).toInt()
+        ).apply { topMargin = (32 * density).toInt() })
+        column.addView(TextView(this).apply {
+            text = "Preparando seu ambiente de desenvolvimento"
+            textSize = 13f
+            gravity = Gravity.CENTER
+            setTextColor(Color.rgb(190, 205, 222))
+        }, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT
+        ).apply { topMargin = (14 * density).toInt() })
+        surface.addView(column, FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+            Gravity.CENTER
+        ))
+        setContentView(surface)
         localServer?.start { result ->
             if (isFinishing || isDestroyed) return@start
             result.fold(

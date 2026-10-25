@@ -26,6 +26,14 @@ import { Categories } from '../../../platform/action/common/actionCommonCategori
 
 const workspacesCategory: ILocalizedString = localize2('workspaces', 'Workspaces');
 
+// Seven Code Android's trusted WebMessageListener bridges Android SAF.
+// Regular desktop/web Code OSS keeps its original file dialogs.
+function inSevenCodeAndroid(): boolean {
+    return typeof window !== 'undefined' &&
+        !!(window as Window & { SevenTerminalNative?: { postMessage(value: string): void } }).SevenTerminalNative;
+}
+
+
 export class OpenFileAction extends Action2 {
 
 	static readonly ID = 'workbench.action.files.openFile';
@@ -45,6 +53,9 @@ export class OpenFileAction extends Action2 {
 	}
 
 	override async run(accessor: ServicesAccessor, data?: ITelemetryData): Promise<void> {
+		if (inSevenCodeAndroid()) {
+            return accessor.get(ICommandService).executeCommand('sevenCode.openAndroidFile');
+        }
 		const fileDialogService = accessor.get(IFileDialogService);
 
 		return fileDialogService.pickFileAndOpen({ forceNewWindow: false, telemetryExtraData: data });
@@ -76,6 +87,9 @@ export class OpenFolderAction extends Action2 {
 	}
 
 	override async run(accessor: ServicesAccessor, data?: ITelemetryData): Promise<void> {
+		if (inSevenCodeAndroid()) {
+            return accessor.get(ICommandService).executeCommand('sevenCode.openAndroidFolder');
+        }
 		const fileDialogService = accessor.get(IFileDialogService);
 
 		return fileDialogService.pickFolderAndOpen({ forceNewWindow: false, telemetryExtraData: data });
@@ -108,6 +122,9 @@ export class OpenFolderViaWorkspaceAction extends Action2 {
 	override run(accessor: ServicesAccessor): Promise<void> {
 		const commandService = accessor.get(ICommandService);
 
+		if (inSevenCodeAndroid()) {
+            return commandService.executeCommand('sevenCode.openAndroidFolder');
+        }
 		return commandService.executeCommand(SET_ROOT_FOLDER_COMMAND_ID);
 	}
 }
