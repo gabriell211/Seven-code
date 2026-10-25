@@ -16,6 +16,7 @@ for (const entry of [
   'assets/seven-web/out/nls.messages.js',
   'assets/seven-web/bootstrap.js',
   'assets/seven-web/bundle.json',
+  'assets/seven-web/licenses/vscode-loc-LICENSE.md',
   'assets/seven-web/extensions/seven-code-mobile-terminal/package.json',
   'assets/seven-web/extensions/seven-code-mobile-terminal/dist/browser/extension.js',
   'assets/seven-web/extensions/copilot-chat/package.json',
@@ -55,6 +56,11 @@ assert.equal(githubManifest.browser, './dist/browser/extension.js');
 assert.ok(!githubManifest.main);
 const metadata = JSON.parse(unzip(['-p', apk, 'assets/seven-web/bundle.json']).toString('utf8'));
 assert.equal(metadata.noNodeRequiredForUi, true);
+assert.equal(metadata.uiLanguage, 'pt-br', 'Unlocalized APK must not pass verification');
+assert.ok(metadata.uiTranslations?.translated >= 500, 'Too few authentic Portuguese translations');
+const translations = unzip(['-p', apk, 'assets/seven-web/out/nls.messages.js']).toString('utf8');
+assert.ok(translations.includes('globalThis._VSCODE_NLS_LANGUAGE = "pt-br"'),
+  'Workbench NLS locale missing even though HTML has lang=pt-BR');
 assert.equal(metadata.remoteNodeExtensions, false);
 assert.equal(metadata.copilotWebWorkerPackaged, true);
 assert.equal(metadata.githubAuthWebWorkerPackaged, true);

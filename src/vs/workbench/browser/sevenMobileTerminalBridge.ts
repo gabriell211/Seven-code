@@ -1,4 +1,5 @@
 /* Seven Code mobile transport: only present in the web workbench of a trusted native host. */
+import { MenuId, MenuRegistry } from '../../platform/actions/common/actions.js';
 interface SevenNativeTerminalHost {
     postMessage(message: string): void;
 }
@@ -21,6 +22,35 @@ declare global {
 }
 const host = window.SevenTerminalNative;
 if (host && typeof BroadcastChannel !== 'undefined') {
+    // Original Code OSS Accounts menu: expose the existing GitHub provider's
+    // native device-code sign-in command instead of a fake login page.
+    // The extension command activates on demand and handles OAuth sessions.
+    const mobileMenuItems = [
+        MenuRegistry.appendMenuItem(MenuId.AccountsContext, {
+            command: { id: 'sevenCode.githubSignIn', title: 'Entrar com GitHub (Seven Code)' },
+            group: '1_seven_mobile@1'
+        }),
+        // Welcome/editor three-dot menu must expose actions which can operate
+        // on an Android SAF workspace instead of unsupported desktop paths.
+        MenuRegistry.appendMenuItem(MenuId.EditorTitle, {
+            command: { id: 'sevenCode.openAndroidFolder', title: 'Abrir pasta do celular' },
+            group: 'navigation@50'
+        }),
+        MenuRegistry.appendMenuItem(MenuId.EditorTitle, {
+            command: { id: 'sevenCode.newAndroidFile', title: 'Novo arquivo no celular' },
+            group: 'navigation@51'
+        }),
+        // Chat title ellipsis: a working authentication action and an honest
+        // diagnostic when the official Copilot Node host is unavailable.
+        MenuRegistry.appendMenuItem(MenuId.ChatTitleBarMenu, {
+            command: { id: 'sevenCode.githubSignIn', title: 'Entrar com GitHub' },
+            group: '1_seven_mobile@1'
+        }),
+        MenuRegistry.appendMenuItem(MenuId.ChatTitleBarMenu, {
+            command: { id: 'sevenCode.copilotStatus', title: 'Diagnóstico do Copilot' },
+            group: '1_seven_mobile@2'
+        })
+    ];
     // Monaco, xterm.js, the command palette and dialogs use real Chromium
     // text fields. Android WebView may focus them without opening the IME.
     // Ask the host to show the phone's configured Android keyboard only on
@@ -149,6 +179,7 @@ if (host && typeof BroadcastChannel !== 'undefined') {
     window.addEventListener('pagehide', () => {
         document.removeEventListener('focusin', onEditorFocus, true);
         document.removeEventListener('pointerup', onEditorPointer, true);
+        mobileMenuItems.forEach(item => item.dispose());
         window.sevenNativeEvent = undefined;
         channel.close();
         files.close();
