@@ -80,15 +80,40 @@ class SevenOfflineWebWorkbenchDeviceTest {
             // editor is on screen, not a mock HTML render or stock photo.
             // The CI retrieves this file from the app sandbox with adb run-as.
             SystemClock.sleep(1800)
-            val pixels = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
-            assertTrue("Android emulator did not provide a screen capture", pixels != null)
             val screenshot = File(context.filesDir, "seven-code-portrait.png")
-            screenshot.outputStream().use { output ->
-                assertTrue("Could not encode emulator screen to PNG",
-                    pixels!!.compress(Bitmap.CompressFormat.PNG, 100, output))
+            var visualProof = false
+            var lastDiagnostic = "No screenshot"
+            for (captureAttempt in 0 until 5) {
+                val pixels = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
+                if (pixels != null) {
+                    try {
+                        // A lossless PNG can legitimately be below 20 KiB on
+                        // headless emulators. Reject empty/solid frames by
+                        // inspecting actual compositor colors and dimensions.
+                        val colors = HashSet<Int>()
+                        val xStep = (pixels.width / 32).coerceAtLeast(1)
+                        val yStep = (pixels.height / 32).coerceAtLeast(1)
+                        for (y in pixels.height / 10 until pixels.height * 9 / 10 step yStep) {
+                            for (x in pixels.width / 10 until pixels.width * 9 / 10 step xStep) {
+                                colors.add(pixels.getPixel(x, y))
+                            }
+                        }
+                        screenshot.outputStream().use { output ->
+                            assertTrue("Could not encode emulator screen to PNG",
+                                pixels.compress(Bitmap.CompressFormat.PNG, 100, output))
+                        }
+                        visualProof = pixels.width >= 320 && pixels.height >= 480 &&
+                            colors.size >= 8 && screenshot.length() > 4_096L
+                        lastDiagnostic = "dimensions=${pixels.width}x${pixels.height}; " +
+                            "interiorColors=${colors.size}; pngBytes=${screenshot.length()}"
+                    } finally {
+                        pixels.recycle()
+                    }
+                }
+                if (visualProof) break
+                SystemClock.sleep(800)
             }
-            pixels!!.recycle()
-            assertTrue("Captured screen is empty or truncated", screenshot.length() > 20_000L)
+            assertTrue("Real Code OSS editor was not visibly painted on screen: $lastDiagnostic", visualProof)
 
         }
     }
