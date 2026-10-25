@@ -42,6 +42,8 @@ android {
                 applicationIdSuffix = ".preview"
                 versionNameSuffix = "-isolated"
                 manifestPlaceholders["sevenAppLabel"] = "Seven Code Preview"
+                versionCode = 3
+                versionName = "0.2.0-preview.3"
             }
         }
         release {
