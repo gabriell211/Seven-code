@@ -63,6 +63,7 @@ class SevenStandaloneGnuDeviceTest {
             "Do not mark an x86 emulator green without translation.",
             android.os.Build.SUPPORTED_ABIS.contains("arm64-v8a"))
 
+        val testStartedAt = System.currentTimeMillis()
         val scene = ActivityScenario.launch(MainActivity::class.java)
         try {
             var localUrl: String? = null
@@ -137,6 +138,26 @@ class SevenStandaloneGnuDeviceTest {
             }
             assertEquals("Original Monaco Code OSS editor DOM did not load",
                 "true", domResult.get())
+            // A real Node.js workspace extension must activate inside the
+            // LOCAL Android Code OSS server, fork a genuine Node child and
+            // prove IPC. A browser-only Web Worker cannot write this evidence.
+            val evidence = java.io.File(context.filesDir, "seven-code-node-runtime-proof.json")
+            val nodeDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(60)
+            while (System.nanoTime() < nodeDeadline &&
+                (!evidence.isFile || evidence.lastModified() < testStartedAt)) {
+                Thread.sleep(800)
+            }
+            assertTrue("Original Android Node workspace extension host did not activate or fork a Node child",
+                evidence.isFile && evidence.lastModified() >= testStartedAt)
+            val result = org.json.JSONObject(evidence.readText())
+            assertEquals("seven-code-original-node-extension-host-live", result.getString("kind"))
+            assertTrue("Original Node.js child-process.fork IPC failed on Android",
+                result.getBoolean("nodeForkOk"))
+            assertTrue("Real native Node child PID was never recorded", result.getInt("pid") > 0)
+            assertTrue("Node runtime on Android must be ARM64", result.getString("arch") == "arm64")
+            assertTrue("The genuine Copilot native module did not load on Android; NOT a complete runtime",
+                result.getBoolean("copilotNativeAddonLoaded"))
+
         } finally {
             scene.close()
         }
