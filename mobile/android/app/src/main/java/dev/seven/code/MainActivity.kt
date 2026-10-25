@@ -9,7 +9,6 @@ import android.graphics.Bitmap
 import android.graphics.Color
 import android.content.res.ColorStateList
 import android.view.Gravity
-import android.view.MotionEvent
 import android.view.inputmethod.InputMethodManager
 import android.widget.FrameLayout
 import android.widget.ProgressBar
@@ -217,17 +216,11 @@ class MainActivity : Activity() {
         val previousWebView = if (::webView.isInitialized) webView else null
         trustedOrigin = parsed.first
         webView = WebView(this).apply {
-            // The original Monaco editor uses an underlying HTML textarea.
-            // Android IME must connect to the actual focused WebView, not to a
-            // native dummy EditText that would swallow typed code.
+            // Chromium must own touch/focus dispatch to the real Monaco textarea,
+            // search boxes and Copilot inputs. requestFocusFromTouch on every
+            // ACTION_DOWN can invalidate an already active HTML input connection.
             isFocusable = true
             isFocusableInTouchMode = true
-            setOnTouchListener { view, event ->
-                if (event.actionMasked == MotionEvent.ACTION_DOWN) {
-                    view.requestFocusFromTouch()
-                }
-                false // Chromium still receives the original touch event.
-            }
         }
         webView.settings.apply {
             javaScriptEnabled = true
@@ -556,16 +549,30 @@ class MainActivity : Activity() {
         if (now - lastImeRequestTime < 90L) return
         lastImeRequestTime = now
         val editorView = webView
-        editorView.isFocusableInTouchMode = true
-        editorView.requestFocus()
-        // The JS focus event precedes Chromium's input-connection update on
-        // some Android devices. Give its genuine textarea time to focus.
+        // Don't open a disconnected IME merely because the outer WebView has
+        // focus: keys would go nowhere. Let Chromium attach its real HTML
+        // input connection, then request the system keyboard for that input.
         editorView.postDelayed({
             if (workbenchActive && editorView === webView &&
-                editorView.hasFocus() && editorView.isAttachedToWindow &&
-                !isFinishing && !isDestroyed) {
-                val ime = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-                ime.showSoftInput(editorView, InputMethodManager.SHOW_IMPLICIT)
+                editorView.hasFocus() && editorView.hasWindowFocus() &&
+                editorView.isAttachedToWindow && !isFinishing && !isDestroyed) {
+                editorView.evaluateJavascript(
+                    """(function () {
+                        const input = document.activeElement;
+                        return !!input && input.matches(
+                            'textarea:not([disabled]):not([readonly]),' +
+                            'input:not([disabled]):not([readonly]):not([type="hidden"]),' +
+                            '[contenteditable]:not([contenteditable="false"])'
+                        );
+                    })()""".trimIndent()
+                ) { focused ->
+                    if (focused != "true" || editorView !== webView ||
+                        !workbenchActive || !editorView.hasFocus() ||
+                        !editorView.hasWindowFocus() || !editorView.isAttachedToWindow ||
+                        isFinishing || isDestroyed) return@evaluateJavascript
+                    val ime = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+                    ime.showSoftInput(editorView, InputMethodManager.SHOW_IMPLICIT)
+                }
             }
         }, 110L)
     }
