@@ -21,6 +21,33 @@ declare global {
 }
 const host = window.SevenTerminalNative;
 if (host && typeof BroadcastChannel !== 'undefined') {
+    // Monaco, xterm.js, the command palette and dialogs use real Chromium
+    // text fields. Android WebView may focus them without opening the IME.
+    // Ask the host to show the phone's configured Android keyboard only on
+    // user interaction or real text-field focus (never at app startup).
+    const postImeRequest = () => {
+        host.postMessage(JSON.stringify({ type: 'keyboard-request' }));
+    };
+    const isTextInput = (element: Element | null): boolean =>
+        !!element && (element.matches('textarea, input:not([type="hidden"]), [contenteditable="true"], [role="textbox"]'));
+    const onEditorFocus = (event: FocusEvent) => {
+        if (event.target instanceof Element && isTextInput(event.target)) {
+            postImeRequest();
+        }
+    };
+    const onEditorPointer = (event: PointerEvent) => {
+        if (event.pointerType !== 'touch' && event.pointerType !== 'pen') return;
+        if (!(event.target instanceof Element)) return;
+        const target = event.target;
+        const editingSurface = isTextInput(target) ||
+            !!target.closest('.monaco-editor, .xterm, .quick-input-widget, .monaco-inputbox, .find-widget, .search-widget');
+        if (!editingSurface) return;
+        // Code OSS often focuses Monaco's hidden textarea AFTER pointerup.
+        // Native will show the system IME against the same real WebView.
+        window.setTimeout(postImeRequest, 95);
+    };
+    document.addEventListener('focusin', onEditorFocus, true);
+    document.addEventListener('pointerup', onEditorPointer, true);
     const channel = new BroadcastChannel('seven-code-mobile-terminal-v1');
     const files = new BroadcastChannel('seven-code-mobile-files-v1');
     const ai = new BroadcastChannel('seven-code-mobile-ai-v1');
@@ -100,6 +127,8 @@ if (host && typeof BroadcastChannel !== 'undefined') {
         }
     };
     window.addEventListener('pagehide', () => {
+        document.removeEventListener('focusin', onEditorFocus, true);
+        document.removeEventListener('pointerup', onEditorPointer, true);
         window.sevenNativeEvent = undefined;
         channel.close();
         files.close();
