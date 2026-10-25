@@ -20,7 +20,10 @@
     "onCommand:sevenCode.copilotStatus",
     "onCommand:sevenCode.githubSignIn",
     "onCommand:sevenCode.copilotLiveAcceptance",
-    "onCommand:sevenCode.copilotAgentAcceptance"
+    "onCommand:sevenCode.copilotAgentAcceptance",
+    "onCommand:sevenCode.openAndroidFile",
+    "onCommand:sevenCode.newAndroidFile",
+    "onCommand:sevenCode.newAndroidFolder"
   ],
   "capabilities": {
     "virtualWorkspaces": true,
@@ -71,6 +74,21 @@
         "command": "sevenCode.copilotAgentAcceptance",
         "title": "Seven Code: Homologar Copilot Agent com terminal Android",
         "category": "Seven Code"
+      },
+      {
+        "command": "sevenCode.openAndroidFile",
+        "title": "Seven Code: Abrir arquivo do celular",
+        "category": "Seven Code"
+      },
+      {
+        "command": "sevenCode.newAndroidFile",
+        "title": "Seven Code: Novo arquivo no celular",
+        "category": "Seven Code"
+      },
+      {
+        "command": "sevenCode.newAndroidFolder",
+        "title": "Seven Code: Nova pasta no celular",
+        "category": "Seven Code"
       }
     ],
     "languageModelTools": [
@@ -116,6 +134,50 @@
           ]
         }
       }
-    ]
+    ],
+    "menus": {
+      "menubar/file": [
+        {
+          "command": "sevenCode.newAndroidFile",
+          "group": "1_new@1"
+        },
+        {
+          "command": "sevenCode.newAndroidFolder",
+          "group": "1_new@2"
+        },
+        {
+          "command": "sevenCode.openAndroidFolder",
+          "group": "2_open@1"
+        },
+        {
+          "command": "sevenCode.openAndroidFile",
+          "group": "2_open@2"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "sevenCode.newAndroidFile",
+          "group": "2_workspace@1"
+        },
+        {
+          "command": "sevenCode.newAndroidFolder",
+          "group": "2_workspace@2"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "sevenCode.openAndroidFolder"
+        },
+        {
+          "command": "sevenCode.openAndroidFile"
+        },
+        {
+          "command": "sevenCode.newAndroidFile"
+        },
+        {
+          "command": "sevenCode.newAndroidFolder"
+        }
+      ]
+    }
   }
 }
