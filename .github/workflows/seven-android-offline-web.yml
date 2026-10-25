@@ -11,6 +11,8 @@ on:
       - ".seven/tests/android-copilot-chat-command.test.mjs"
       - "extensions/github-authentication/**"
       - ".seven/tests/android-github-device-auth.test.mjs"
+      - ".seven/tests/android-copilot-chat-command.test.mjs"
+      - "extensions/seven-code-mobile-terminal/**"
       - "src/vs/workbench/browser/sevenMobileTerminalBridge.ts"
       - ".seven/verify-android-web.mjs"
       - ".seven/tests/android-web-bundle.test.mjs"
@@ -23,6 +25,8 @@ on:
     paths:
       - "extensions/github-authentication/**"
       - ".seven/tests/android-github-device-auth.test.mjs"
+      - ".seven/tests/android-copilot-chat-command.test.mjs"
+      - "extensions/seven-code-mobile-terminal/**"
       - "src/vs/workbench/browser/sevenMobileTerminalBridge.ts"
       - ".github/workflows/seven-android-offline-web.yml"
       - ".seven/package-android-web.mjs"
