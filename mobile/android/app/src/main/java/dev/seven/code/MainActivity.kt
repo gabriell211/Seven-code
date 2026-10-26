@@ -8,6 +8,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.content.res.ColorStateList
+import android.content.res.Configuration
 import android.view.Gravity
 import android.view.inputmethod.InputMethodManager
 import android.widget.FrameLayout
@@ -104,6 +105,20 @@ class MainActivity : Activity() {
         assets.open("seven-web/index.html").use { true }
     } catch (_: IOException) {
         false
+    }
+
+    /**
+     * Retain the live Chromium WebView during rotations, split-screen,
+     * keyboard attachment and density changes. Recreating the Activity
+     * would restart Code OSS, discard unsaved Monaco models and OAuth
+     * polling, and terminate Android PTY sessions.
+     */
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        if (::webView.isInitialized && workbenchActive) {
+            webView.requestLayout()
+            webView.invalidate()
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
