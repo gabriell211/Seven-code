@@ -5,6 +5,12 @@ set -euo pipefail
 
 abi=$(adb shell getprop ro.product.cpu.abilist | tr -d '\r')
 echo "Android ABI availability: $abi"
+primary_abi=$(adb shell getprop ro.product.cpu.abi | tr -d '\\r')
+echo "Android primary ABI: $primary_abi"
+if [[ "$primary_abi" != "arm64-v8a" ]]; then
+  echo "::error::GNU native ARM64 acceptance cannot run on primary ABI $primary_abi. Android native-bridge ARM64 translation on x86_64 is not proof of ARM64 execution."
+  exit 1
+fi
 if [[ "$abi" != *arm64-v8a* ]]; then
   echo "::error::This Android emulator does not report ARM64 translation. Cannot validate original GNU Code OSS on an unsupported CPU."
   exit 1
@@ -60,6 +66,11 @@ diagnose_android_codeoss_failure() {
     adb shell run-as dev.seven.code cat files/seven-code-oss-local/startup-phase.txt 2>/dev/null || true
     echo "Android GNU Node child_process.fork IPC preflight (redacted):"
     adb shell run-as dev.seven.code cat files/seven-code-oss-local/gnu-node-fork-probe.log 2>/dev/null |
+      sed -E 's/[[:xdigit:]]{64}/[redacted-local-token]/g' |
+      head -n 25 || true
+    echo "GNU loader/Node version probe and Android primary ABI (no tokens):"
+    adb shell run-as dev.seven.code cat files/seven-code-oss-local/gnu-platform-probe.txt 2>/dev/null | head -n 4 || true
+    adb shell run-as dev.seven.code cat files/seven-code-oss-local/gnu-node-version-probe.log 2>/dev/null |
       sed -E 's/[[:xdigit:]]{64}/[redacted-local-token]/g' |
       head -n 25 || true
     echo "Original Code OSS server log (local auth token redacted):"
