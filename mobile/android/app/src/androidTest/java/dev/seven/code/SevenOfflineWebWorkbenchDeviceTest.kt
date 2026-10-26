@@ -18,6 +18,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.uiautomator.UiDevice
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.util.concurrent.CountDownLatch
@@ -257,11 +258,11 @@ class SevenOfflineWebWorkbenchDeviceTest {
                                 input = document.createElement('textarea');
                                 input.id = 'seven-ime-e2e';
                                 input.style.cssText =
-                                  'position:fixed;bottom:12px;left:12px;width:160px;height:42px;z-index:20';
+                                  'position:fixed;top:calc(50% - 21px);left:calc(50% - 80px);' +
+                                  'width:160px;height:42px;z-index:2147483647;opacity:1';
                                 document.querySelector('.monaco-workbench').append(input);
                             }
-                            input.focus();
-                            return document.activeElement === input;
+                            return !!input && input.getBoundingClientRect().width > 0;
                         })()"""
                     ) {
                         result.set(it)
@@ -274,7 +275,25 @@ class SevenOfflineWebWorkbenchDeviceTest {
                 }
                 SystemClock.sleep(500)
             }
-            assertTrue("Chromium could not focus its original WebView text input", focused)
+            assertTrue("The genuine Code OSS WebView did not render the IME test input", focused)
+            // Android WebView may legally refuse to display a keyboard for
+            // programmatic JS input.focus() without a real user gesture.
+            // Simulate an actual finger tap on the visible textarea instead.
+            // This proves the same path the user's Android keyboard uses.
+            val tap = AtomicReference<Pair<Int, Int>?>(null)
+            scenario.onActivity { activity ->
+                val web = activity.findViewById<android.view.ViewGroup>(
+                    android.R.id.content).getChildAt(0) as? WebView
+                if (web != null) {
+                    val position = IntArray(2)
+                    web.getLocationOnScreen(position)
+                    tap.set(Pair(position[0] + web.width / 2, position[1] + web.height / 2))
+                }
+            }
+            val target = tap.get()
+            assertTrue("No WebView center available for real user IME tap", target != null)
+            assertTrue("Android could not tap the real editor field",
+                UiDevice.getInstance(instrumentation).click(target!!.first, target.second))
             var keyboardVisible = false
             for (attempt in 0 until 35) {
                 scenario.onActivity { activity ->
@@ -286,8 +305,15 @@ class SevenOfflineWebWorkbenchDeviceTest {
                 if (keyboardVisible) break
                 SystemClock.sleep(500)
             }
+            val focusDiagnostic = AtomicReference("unknown")
+            scenario.onActivity { activity ->
+                val root = activity.findViewById<android.view.ViewGroup>(android.R.id.content)
+                val web = root.getChildAt(0) as? WebView
+                focusDiagnostic.set("nativeFocus=${web?.hasFocus()}, windowFocus=${web?.hasWindowFocus()}")
+            }
             assertTrue(
-                "The trusted Code OSS WebView focus did not open the configured Android system keyboard",
+                "Real touch in Code OSS textarea did not open Android IME: " +
+                    focusDiagnostic.get(),
                 keyboardVisible
             )
             // Keyboard visibility does not imply its input reaches Chromium.
