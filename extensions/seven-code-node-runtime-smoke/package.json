@@ -13,7 +13,8 @@
     "workspace"
   ],
   "activationEvents": [
-    "onStartupFinished"
+    "onStartupFinished",
+    "onCommand:sevenCode.nodeCopilotLiveAcceptance"
   ],
   "categories": [
     "Other"
@@ -23,6 +24,11 @@
       {
         "command": "sevenCode.nodeRuntimeSmoke",
         "title": "Seven Code: Diagnóstico REAL do runtime Node.js",
+        "category": "Seven Code"
+      },
+      {
+        "command": "sevenCode.nodeCopilotLiveAcceptance",
+        "title": "Seven Code: Homologar resposta REAL do Copilot no Node Android",
         "category": "Seven Code"
       }
     ]
