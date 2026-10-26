@@ -145,8 +145,8 @@ jobs:
           node .seven/verify-android-web.mjs "$apk"
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$apk"
           "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$apk" | tee "$RUNNER_TEMP/seven-preview-badging.txt"
-          grep -F "package: name='dev.seven.code.preview4'" "$RUNNER_TEMP/seven-preview-badging.txt"
-          grep -F "versionCode='4'" "$RUNNER_TEMP/seven-preview-badging.txt"
+          grep -F "package: name='dev.seven.code.preview5'" "$RUNNER_TEMP/seven-preview-badging.txt"
+          grep -F "versionCode='5'" "$RUNNER_TEMP/seven-preview-badging.txt"
           sha256sum "$apk"
       - name: Require real hardware acceleration for emulator E2E
         run: |

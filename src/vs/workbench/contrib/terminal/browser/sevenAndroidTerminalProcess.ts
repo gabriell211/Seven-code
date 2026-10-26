@@ -64,6 +64,19 @@ export class SevenAndroidTerminalProcess extends Disposable implements ITerminal
 	private closed = false;
 	private cwd = '';
 	private dimensions: { cols: number; rows: number } | undefined;
+	private startResolve: ((error: ITerminalLaunchError | undefined) => void) | undefined;
+	private startPromise: Promise<ITerminalLaunchError | undefined> | undefined;
+	private readonly startTimers: Array<ReturnType<typeof setTimeout>> = [];
+
+	private finishStart(error: ITerminalLaunchError | undefined): void {
+		for (const timer of this.startTimers) {
+			clearTimeout(timer);
+		}
+		this.startTimers.length = 0;
+		const resolve = this.startResolve;
+		this.startResolve = undefined;
+		resolve?.(error);
+	}
 
 	constructor(private readonly cols: number, private readonly rows: number) {
 		super();
@@ -97,6 +110,7 @@ export class SevenAndroidTerminalProcess extends Disposable implements ITerminal
 					return;
 				}
 				this.ready = true;
+				this.finishStart(undefined);
 				this.cwd = typeof event.cwd === 'string' && event.cwd.startsWith('/') && event.cwd.length < 1024 ? event.cwd : '/';
 				if (this.dimensions) {
 					this.send('resize', this.dimensions);
@@ -115,6 +129,7 @@ export class SevenAndroidTerminalProcess extends Disposable implements ITerminal
 					cwd: this.cwd,
 					windowsPty: undefined,
 				});
+				this._onProcessData.fire('[Seven Code] Shell Android conectado.\r\n');
 				break;
 			case 'data':
 				if (typeof event.value === 'string' && event.value.length <= 100_000) {
@@ -126,11 +141,18 @@ export class SevenAndroidTerminalProcess extends Disposable implements ITerminal
 					}
 				}
 				break;
-			case 'error':
-				this._onProcessData.fire('\r\n[Seven Code] ' +
-					(typeof event.value === 'string' ? event.value.slice(0, 1000) : 'Android PTY failed') + '\r\n');
+			case 'error': {
+				const detail = typeof event.value === 'string' ? event.value.slice(0, 1000) : 'Android PTY failed';
+				this._onProcessData.fire('\r\n[Seven Code] ' + detail + '\r\n');
+				if (!this.ready) {
+					this.finishStart({ message: 'Seven Code Android: ' + detail });
+				}
 				break;
+			}
 			case 'exit':
+				if (!this.ready) {
+					this.finishStart({ message: 'O shell Android encerrou antes de ficar pronto.' });
+				}
 				this._onProcessData.fire(this.decoder.decode());
 				this._onProcessExit.fire(typeof event.exitCode === 'number' ? event.exitCode : undefined);
 				this.dispose();
@@ -142,11 +164,38 @@ export class SevenAndroidTerminalProcess extends Disposable implements ITerminal
 		if (this.closed || !hasSevenAndroidTerminal()) {
 			return { message: 'Android terminal host is unavailable' };
 		}
-		this.send('start', {
-			cols: this.clamp(this.cols),
-			rows: this.clamp(this.rows),
+		if (this.startPromise) {
+			return this.startPromise;
+		}
+		this.startPromise = new Promise<ITerminalLaunchError | undefined>(resolve => {
+			this.startResolve = resolve;
 		});
-		return undefined;
+		const dimensions = { cols: this.clamp(this.cols), rows: this.clamp(this.rows) };
+		// Return only after the native host confirms a real PTY. Previously
+		// we resolved immediately, leaving a permanently empty terminal if
+		// the first WebView message raced bridge initialization.
+		this._onProcessData.fire('[Seven Code] Solicitando shell Android; confirme o diálogo do sistema.\r\n');
+		this.send('start', dimensions);
+		// MainActivity deduplicates by sessionId across pending and active PTYs.
+		// Never replay input or create a second shell during these retries.
+		for (const delay of [1200, 3500, 8000]) {
+			this.startTimers.push(setTimeout(() => {
+				if (!this.closed && !this.ready) {
+					this.send('start', dimensions);
+				}
+			}, delay));
+		}
+		this.startTimers.push(setTimeout(() => {
+			if (this.closed || this.ready) {
+				return;
+			}
+			const error = { message: 'Sem resposta do terminal Android. Verifique a permissão nativa e reabra o terminal.' };
+			this._onProcessData.fire('\r\n[Seven Code] ' + error.message + '\r\n');
+			this.finishStart(error);
+			this.send('close');
+			this.dispose();
+		}, 30000));
+		return this.startPromise;
 	}
 
 	private clamp(value: number): number {
@@ -231,6 +280,7 @@ export class SevenAndroidTerminalProcess extends Disposable implements ITerminal
 			return;
 		}
 		this.closed = true;
+		this.finishStart({ message: 'O terminal Android foi encerrado antes de iniciar.' });
 		this.queuedInput.length = 0;
 		this.pendingBytes = 0;
 		this.channel.close();

@@ -176,7 +176,31 @@ test('PTY forwards terminal input/resize to native and streams UTF-8 output', as
         value: btoa(String.fromCharCode(...new TextEncoder().encode('olá\r\n')))
     });
     await new Promise(resolve => setTimeout(resolve, 0));
-    assert.equal(output, 'olá\r\n');
+    assert.match(output, /Solicitando shell Android/);
+    assert.match(output, /Sessão nativa autorizada/);
+    assert.ok(output.endsWith('olá\r\n'));
+    pty.close();
+    app.host.close();
+});
+
+test('PTY retries a dropped start using the same session and stops after native ready', async () => {
+    const app = launch(true);
+    await app.activate();
+    const pty = app.provider().provideTerminalProfile().options.pty;
+    const writes = [];
+    pty.onDidWrite(value => writes.push(value));
+    pty.open({ columns: 80, rows: 24 });
+    await new Promise(resolve => setTimeout(resolve, 1450));
+    const starts = app.messages.filter(m => m.type === 'start');
+    assert.ok(starts.length >= 2, 'initial start must be retried after a bridge race');
+    assert.equal(new Set(starts.map(m => m.sessionId)).size, 1, 'never create duplicate Android sessions');
+    assert.match(writes.join(''), /Solicitando shell Android/);
+    assert.equal(app.messages.some(m => m.type === 'input'), false, 'no shell commands before consent');
+    app.host.postMessage({ type: 'ready', sessionId: starts[0].sessionId });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    assert.equal(pty.ready, true);
+    assert.equal(pty.startRetryTimers.length, 0);
+    assert.equal(pty.startTimeout, null);
     pty.close();
     app.host.close();
 });
@@ -314,7 +338,7 @@ test('terminal API command reaches the mobile PTY after simulated Android approv
         value: btoa('copilot-native-ok\r\n') });
     app.host.postMessage({ type: 'exit', sessionId: started.sessionId, exitCode: 0 });
     await new Promise(resolve => setTimeout(resolve, 0));
-    assert.equal(chunks.join(''), 'copilot-native-ok\r\n', 'Terminal buffer should receive stdout with CRLF');
+    assert.ok(chunks.join('').endsWith('copilot-native-ok\r\n'), 'Terminal buffer should receive stdout with CRLF');
     assert.equal(exitCode, 0, 'Native exit status should be returned to the editor');
     app.host.close();
 });
@@ -329,6 +353,12 @@ test('mobile routes ordinary and extension-created terminals through trusted nat
     assert.match(terminalProcessSource, /implements ITerminalChildProcess/);
     assert.match(terminalProcessSource, /onProcessReady/);
     assert.match(terminalProcessSource, /onProcessExit/);
+    assert.match(terminalProcessSource, /private finishStart/);
+    assert.match(terminalProcessSource, /this\.finishStart\(undefined\)/);
+    assert.match(terminalProcessSource, /for \(const delay of \[1200, 3500, 8000\]\)/);
+    assert.match(terminalProcessSource, /this\.send\('start', dimensions\)/);
+    assert.match(terminalProcessSource, /this\.startTimers\.push\(setTimeout/);
+    assert.match(terminalProcessSource, /Sem resposta do terminal Android/);
     assert.match(terminalProcessSource, /MAX_PENDING_INPUT = 131072/);
     assert.match(native, /"pid", pty\.shellPid\(\)/);
     assert.match(native, /"cwd", filesDir\.canonicalPath/);

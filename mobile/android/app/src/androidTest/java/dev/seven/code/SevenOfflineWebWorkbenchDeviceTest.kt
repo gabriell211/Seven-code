@@ -18,6 +18,8 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.uiautomator.By
+import androidx.test.uiautomator.Until
 import androidx.test.uiautomator.UiDevice
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -286,17 +288,43 @@ class SevenOfflineWebWorkbenchDeviceTest {
             // Simulate an actual finger tap on the visible textarea instead.
             // This proves the same path the user's Android keyboard uses.
             val tap = AtomicReference<Pair<Int, Int>?>(null)
+            val positionLatch = CountDownLatch(1)
             scenario.onActivity { activity ->
                 val web = activity.findViewById<android.view.ViewGroup>(
                     android.R.id.content).getChildAt(0) as? WebView
-                if (web != null) {
-                    val position = IntArray(2)
-                    web.getLocationOnScreen(position)
-                    tap.set(Pair(position[0] + web.width / 2, position[1] + web.height / 2))
+                if (web == null) {
+                    positionLatch.countDown()
+                    return@onActivity
+                }
+                // A Workbench panel or system inset may shift the actual
+                // textarea away from the WebView center. Tap the REAL HTML
+                // element by its current DOM bounding box instead.
+                web.evaluateJavascript(
+                    """(function() {
+                        const input = document.getElementById('seven-ime-e2e');
+                        if (!input) return '';
+                        const r = input.getBoundingClientRect();
+                        if (!r.width || !r.height) return '';
+                        return [(r.left + r.width / 2) / window.innerWidth,
+                            (r.top + r.height / 2) / window.innerHeight].join(',');
+                    })()"""
+                ) { value ->
+                    val fractions = value.removeSurrounding("\"").split(",")
+                        .mapNotNull { it.toDoubleOrNull() }
+                    if (fractions.size == 2 && fractions.all { it in 0.0..1.0 }) {
+                        val position = IntArray(2)
+                        web.getLocationOnScreen(position)
+                        tap.set(Pair(
+                            position[0] + (web.width * fractions[0]).toInt(),
+                            position[1] + (web.height * fractions[1]).toInt()))
+                    }
+                    positionLatch.countDown()
                 }
             }
+            assertTrue("WebView DOM textarea coordinate lookup timed out",
+                positionLatch.await(5, TimeUnit.SECONDS))
             val target = tap.get() ?: throw AssertionError(
-                "No WebView center available for real user IME tap")
+                "No actual DOM textarea coordinates available for real user IME tap")
             assertTrue("Android could not tap the real editor field",
                 UiDevice.getInstance(instrumentation).click(target.first, target.second))
             var keyboardVisible = false
@@ -385,6 +413,136 @@ class SevenOfflineWebWorkbenchDeviceTest {
             }
             assertTrue("IME opened but text was not delivered to HTML input: $lastValue",
                 textArrived)
+        }
+    }
+
+    @Test
+    fun actualWebViewNativeTerminalRequestStartsShellAndReturnsRealOutput() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val bundled = try {
+            context.assets.open("seven-web/bundle.json").use { true }
+        } catch (_: java.io.IOException) { false }
+        assumeTrue("Native shell bridge E2E requires bundled original Code OSS", bundled)
+        val sessionId = "SevenPtyE2eNative0001"
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            var startRequested = false
+            for (attempt in 0 until 75) {
+                val done = CountDownLatch(1)
+                val reply = AtomicReference("false")
+                scenario.onActivity { activity ->
+                    val web = activity.findViewById<android.view.ViewGroup>(android.R.id.content)
+                        .getChildAt(0) as? WebView
+                    if (web == null) {
+                        done.countDown()
+                        return@onActivity
+                    }
+                    web.evaluateJavascript(
+                        """(function() {
+                            if (!document.querySelector('.monaco-workbench') ||
+                                typeof window.sevenNativeEvent !== 'function' ||
+                                !window.SevenTerminalNative) return false;
+                            window.sevenPtyE2eEvents = [];
+                            const original = window.sevenNativeEvent;
+                            window.sevenNativeEvent = function(event) {
+                                if (event && event.sessionId === '$sessionId') {
+                                    window.sevenPtyE2eEvents.push(event);
+                                }
+                                original(event);
+                            };
+                            window.SevenTerminalNative.postMessage(JSON.stringify({
+                                type:'start', sessionId:'$sessionId', cols:80, rows:24
+                            }));
+                            return true;
+                        })()"""
+                    ) {
+                        reply.set(it)
+                        done.countDown()
+                    }
+                }
+                if (done.await(4, TimeUnit.SECONDS) && reply.get() == "true") {
+                    startRequested = true
+                    break
+                }
+                SystemClock.sleep(500)
+            }
+            assertTrue("Original Code OSS did not expose Android native PTY bridge",
+                startRequested)
+            val device = UiDevice.getInstance(instrumentation)
+            val confirm = device.wait(Until.findObject(By.text(java.util.regex.Pattern.compile("(?i)abrir terminal"))), 15_000)
+            assertTrue("Native Android shell consent dialog did not appear", confirm != null)
+            confirm!!.click()
+
+            var ready = false
+            for (attempt in 0 until 45) {
+                val done = CountDownLatch(1)
+                val reply = AtomicReference("false")
+                scenario.onActivity { activity ->
+                    val web = activity.findViewById<android.view.ViewGroup>(android.R.id.content)
+                        .getChildAt(0) as? WebView
+                    if (web == null) {
+                        done.countDown()
+                        return@onActivity
+                    }
+                    web.evaluateJavascript(
+                        "window.sevenPtyE2eEvents?.some(e => e.type === 'ready' && e.sessionId === '$sessionId') === true"
+                    ) {
+                        reply.set(it)
+                        done.countDown()
+                    }
+                }
+                if (done.await(4, TimeUnit.SECONDS) && reply.get() == "true") {
+                    ready = true
+                    break
+                }
+                SystemClock.sleep(250)
+            }
+            assertTrue("Android native PTY never returned a ready event after consent", ready)
+            val encoded = android.util.Base64.encodeToString(
+                "echo SEVEN_ANDROID_PTY_E2E_OK\n".toByteArray(Charsets.UTF_8),
+                android.util.Base64.NO_WRAP)
+            scenario.onActivity { activity ->
+                val web = activity.findViewById<android.view.ViewGroup>(android.R.id.content)
+                    .getChildAt(0) as? WebView ?: return@onActivity
+                web.evaluateJavascript(
+                    "window.SevenTerminalNative.postMessage(JSON.stringify({type:'input'," +
+                        "sessionId:'$sessionId',data:'$encoded'}))", null)
+            }
+            var outputFound = false
+            for (attempt in 0 until 50) {
+                val done = CountDownLatch(1)
+                val reply = AtomicReference("false")
+                scenario.onActivity { activity ->
+                    val web = activity.findViewById<android.view.ViewGroup>(android.R.id.content)
+                        .getChildAt(0) as? WebView
+                    if (web == null) {
+                        done.countDown()
+                        return@onActivity
+                    }
+                    web.evaluateJavascript(
+                        """(window.sevenPtyE2eEvents || [])
+                            .filter(e => e.type === 'data' && typeof e.value === 'string')
+                            .map(e => atob(e.value)).join('').includes('SEVEN_ANDROID_PTY_E2E_OK')"""
+                    ) {
+                        reply.set(it)
+                        done.countDown()
+                    }
+                }
+                if (done.await(4, TimeUnit.SECONDS) && reply.get() == "true") {
+                    outputFound = true
+                    break
+                }
+                SystemClock.sleep(250)
+            }
+            scenario.onActivity { activity ->
+                val web = activity.findViewById<android.view.ViewGroup>(android.R.id.content)
+                    .getChildAt(0) as? WebView ?: return@onActivity
+                web.evaluateJavascript(
+                    "window.SevenTerminalNative.postMessage(JSON.stringify({type:'close'," +
+                        "sessionId:'$sessionId'}))", null)
+            }
+            assertTrue("Native /system/bin/sh did not return real stdout via the WebView bridge",
+                outputFound)
         }
     }
 

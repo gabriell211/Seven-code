@@ -14,6 +14,9 @@ class SevenAndroidPty {
         this.sessionId = crypto.randomUUID().replace(/-/g, '');
         this.closed = false;
         this.ready = false;
+        this.startRequest = null;
+        this.startRetryTimers = [];
+        this.startTimeout = null;
         this.pendingInput = [];
         this.pendingInputBytes = 0;
         this.pendingDimensions = undefined;
@@ -29,6 +32,8 @@ class SevenAndroidPty {
             if (message.type === 'ready') {
                 if (this.ready) return;
                 this.ready = true;
+                this.clearStartTimers();
+                this.onDidWriteEmitter.fire('\r\n[Seven Code] Sessão nativa autorizada. Aguardando saída do shell Android...\r\n');
                 if (this.pendingDimensions) this.send({ type: 'resize', ...this.pendingDimensions });
                 this.pendingDimensions = undefined;
                 for (const bytes of this.pendingInput) this.postInputBytes(bytes);
@@ -45,9 +50,11 @@ class SevenAndroidPty {
                 }
             }
             if (message.type === 'error') {
+                this.clearStartTimers();
                 this.onDidWriteEmitter.fire('\r\n[Seven Code] ' + String(message.value || 'Erro no terminal') + '\r\n');
             }
             if (message.type === 'exit') {
+                this.clearStartTimers();
                 this.closed = true;
                 this.pendingInput = [];
                 this.pendingInputBytes = 0;
@@ -63,12 +70,34 @@ class SevenAndroidPty {
     send(message) {
         if (!this.closed) this.channel.postMessage({ sessionId: this.sessionId, ...message });
     }
+    clearStartTimers() {
+        this.startRetryTimers.forEach(clearTimeout);
+        this.startRetryTimers = [];
+        if (this.startTimeout !== null) clearTimeout(this.startTimeout);
+        this.startTimeout = null;
+    }
     open(dimensions) {
-        this.send({
+        if (this.closed || this.startRequest) return;
+        this.startRequest = {
             type: 'start',
             cols: Math.max(1, Math.min(1000, dimensions?.columns || 80)),
             rows: Math.max(1, Math.min(1000, dimensions?.rows || 24)),
-        });
+        };
+        this.onDidWriteEmitter.fire('[Seven Code] Solicitando shell Android. Autorize a janela nativa quando aparecer.\r\n');
+        this.send(this.startRequest);
+        // The Web extension host may open a PTY before the Workbench's
+        // BroadcastChannel/native bridge is ready. Retry the SAME session,
+        // never a new one: Android deduplicates both pending and active IDs.
+        this.startRetryTimers = [1200, 3500, 8000].map(delay => setTimeout(() => {
+            if (!this.closed && !this.ready) this.send(this.startRequest);
+        }, delay));
+        this.startTimeout = setTimeout(() => {
+            if (!this.closed && !this.ready) {
+                this.onDidWriteEmitter.fire(
+                    '\r\n[Seven Code] Sem confirmação do Android. Verifique a autorização nativa e reabra o terminal.\r\n'
+                );
+            }
+        }, 15000);
     }
     postInputBytes(bytes) {
         for (let i = 0; i < bytes.length; i += 48_000) {
@@ -107,6 +136,7 @@ class SevenAndroidPty {
     }
     close() {
         if (this.closed) return;
+        this.clearStartTimers();
         this.send({ type: 'close' });
         this.closed = true;
         this.pendingInput = [];
