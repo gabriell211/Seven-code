@@ -14,8 +14,8 @@ android {
         versionCode = 2
         versionName = "0.2.0-preview.1"
         if (providers.gradleProperty("sevenPreviewIsolated").orNull == "true") {
-            versionCode = 3
-            versionName = "0.2.0-preview.3"
+            versionCode = 4
+            versionName = "0.2.0-preview.4"
         }
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // The app label is materialized by Gradle so isolated preview builds
@@ -43,9 +43,9 @@ android {
             // disposable Android Web previews install next to the user's
             // existing Seven Code without touching its documents or settings.
             if (providers.gradleProperty("sevenPreviewIsolated").orNull == "true") {
-                applicationIdSuffix = ".preview"
+                applicationIdSuffix = ".preview4"
                 versionNameSuffix = "-isolated"
-                manifestPlaceholders["sevenAppLabel"] = "Seven Code Preview"
+                manifestPlaceholders["sevenAppLabel"] = "Seven Code Preview 4"
             }
         }
         release {
