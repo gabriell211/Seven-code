@@ -53,6 +53,28 @@ test('Android instrumentation requires real original Code OSS workbench DOM and 
   assert.match(bash, /GNU native ARM64 acceptance cannot run/);
 });
 
+test('GNU device diagnostic installs as an isolated APK without replacing Seven Code', () => {
+  const gradle = readFileSync('mobile/android/app/build.gradle.kts', 'utf8');
+  const gnuWorkflow = readFileSync('.github/workflows/seven-android-gnu-apk-experiment.yml', 'utf8');
+  const physical = readFileSync('.github/workflows/seven-android-physical-arm64-e2e.yml', 'utf8');
+  const testScript = readFileSync('mobile/android/tools/test-gnu-node-arm64-device.ps1', 'utf8');
+  assert.match(gradle, /sevenGnuExperiment/);
+  assert.match(gradle, /applicationIdSuffix = "\.gnu"/);
+  assert.match(gradle, /Seven Code GNU Test/);
+  assert.match(gnuWorkflow, /-PsevenGnuExperiment=true/);
+  assert.match(gnuWorkflow, /package: name='dev\.seven\.code\.gnu'/);
+  assert.match(workflow, /-PsevenGnuExperiment=true/);
+  assert.match(physical, /-PsevenGnuExperiment=true/);
+  assert.match(bash, /dev\.seven\.code\.gnu\.test\/androidx\.test\.runner\.AndroidJUnitRunner/);
+  assert.match(bash, /run-as dev\.seven\.code\.gnu/);
+  assert.match(testScript, /ro\.product\.cpu\.abi/);
+  assert.match(testScript, /ro\.kernel\.qemu/);
+  assert.match(testScript, /adb -s \$serial install -t \$apk/);
+  assert.doesNotMatch(testScript, /adb .*uninstall|install -r/i);
+  assert.match(testScript, /SEVEN_GNU_FORK_IPC_OK/);
+  assert.match(testScript, /gnu-node-version-probe\.log/);
+});
+
 test('native GNU startup records failure evidence before claiming Node success', () => {
   const runtime = readFileSync('mobile/android/app/src/main/java/dev/seven/code/SevenLocalGnuRuntime.kt', 'utf8');
   const server = readFileSync('mobile/android/app/src/main/java/dev/seven/code/SevenLocalCodeOssServer.kt', 'utf8');
