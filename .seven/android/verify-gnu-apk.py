@@ -28,6 +28,7 @@ REQUIRED_OUTER = (
     "assets/seven-local/gnu-libs.zip",
     "assets/seven-local/gnu-notices.zip",
     "assets/seven-local/gnu-manifest.json",
+    "assets/seven-local/gnu-node-fork-probe.cjs",
 )
 
 
@@ -79,6 +80,14 @@ def verify(apk):
                 "Research experiment cannot claim Android compatibility/release")
         require(re.fullmatch(r"[a-f0-9]{40}", manifest.get("sourceSha", "")),
                 "Missing upstream Code OSS source revision")
+        expected_probe_sha = manifest.get("nodeForkProbeSha256", "")
+        require(isinstance(expected_probe_sha, str) and
+                re.fullmatch(r"[a-f0-9]{64}", expected_probe_sha),
+                "GNU Node IPC preflight has no valid SHA-256")
+        probe = outer.read("assets/seven-local/gnu-node-fork-probe.cjs")
+        require(100 <= len(probe) <= 16384 and
+                sha(probe) == expected_probe_sha,
+                "Bundled GNU Node IPC preflight was modified")
         require(isinstance(manifest.get("codeossRunId"), int) and
                 manifest["codeossRunId"] > 0, "No source build ID for GNU original")
         for elf, expected in (
