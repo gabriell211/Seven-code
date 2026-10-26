@@ -112,7 +112,7 @@ test('Copilot Chat opens original Code OSS panel and reports missing Node extens
     assert.deepEqual(app.calls, ['workbench.action.chat.open']);
     assert.match(app.messages[0].text, /não está ativo no host/);
     await app.command('sevenCode.copilotStatus')();
-    assert.match(app.messages[1].text, /não está instalado\/ativado/);
+    assert.match(app.messages[1].text, /Nenhuma extensão de Copilot Chat ativa foi encontrada/);
     app.close();
 });
 
@@ -122,7 +122,7 @@ test('Copilot Chat installed status does not pretend to verify OAuth', async () 
     assert.deepEqual(app.calls, ['workbench.action.chat.open']);
     assert.equal(app.messages.length, 0);
     await app.command('sevenCode.copilotStatus')();
-    assert.match(app.messages[0].text, /A autenticação e o Agent devem ser testados/);
+    assert.match(app.messages[0].text, /NÃO comprovam acesso/);
     app.close();
 });
 
