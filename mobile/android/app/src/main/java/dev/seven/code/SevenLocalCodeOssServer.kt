@@ -72,6 +72,56 @@ internal class SevenLocalCodeOssServer(private val context: Context) {
         bootPhase("failed-at:$lastBootPhase;type:${failure.javaClass.simpleName};reason:$reason")
     }
 
+    /**
+     * Privacy-preserving device diagnostics for the failure screen.
+     * Copy only allowlisted phase/ABI/version/IPC and exit status; do not
+     * expose full process logs, private workspace paths, GitHub credentials,
+     * session cookies, Copilot prompts or the loopback connection token.
+     * This is NOT an E2E success claim.
+     */
+    fun safeRuntimeDiagnostic(): String {
+        fun boundedLog(name: String): String =
+            runCatching {
+                val file = File(root, name)
+                if (!file.isFile || file.length() > 32_768L) "" else file.readText().take(2_048)
+            }.getOrDefault("")
+
+        val phase = boundedLog("startup-phase.txt")
+        val stage = Regex("(?:failed-at:)?([A-Za-z][A-Za-z0-9._-]{0,100})")
+            .find(phase)?.groupValues?.getOrNull(1) ?: "indisponível"
+        val errorType = Regex("type:([A-Za-z]{1,50})")
+            .find(phase)?.groupValues?.getOrNull(1) ?: "nenhum"
+        val code = Regex("exit=(\\d{1,4})")
+            .find(phase)?.groupValues?.getOrNull(1) ?: "não registrado"
+        val platform = boundedLog("gnu-platform-probe.txt")
+        val declaredAbi = Regex("primaryAbi=([A-Za-z0-9_-]{1,40})")
+            .find(platform)?.groupValues?.getOrNull(1)
+            ?: android.os.Build.SUPPORTED_ABIS.firstOrNull().orEmpty()
+        val version = Regex("(?m)^v(\\d{1,3}\\.\\d{1,3}\\.\\d{1,4})(?:\\r?\\n|$)")
+            .find(boundedLog("gnu-node-version-probe.log"))?.groupValues?.getOrNull(1)
+        val ipcProof = boundedLog("gnu-node-fork-probe.log")
+            .lineSequence().any { it.trim() == "SEVEN_GNU_FORK_IPC_OK" }
+        val nativeAddonProof = runCatching {
+            val evidence = File(context.filesDir, "seven-code-node-runtime-proof.json")
+            val json = JSONObject(evidence.readText().take(4096))
+            json.optBoolean("nodeForkOk", false) &&
+                json.optBoolean("copilotNativeAddonLoaded", false)
+        }.getOrDefault(false)
+        return buildString {
+            appendLine("Seven Code — diagnóstico GNU Node local (não é homologação)")
+            appendLine("ABI principal: $declaredAbi")
+            appendLine("Android API: ${android.os.Build.VERSION.SDK_INT}")
+            appendLine("Processo 64-bit: ${android.os.Process.is64Bit()}")
+            appendLine("Fase: $stage")
+            appendLine("Tipo de falha: $errorType")
+            appendLine("Código de saída: $code")
+            appendLine("Node.js: ${if (version == null) "não detectado" else "v$version"}")
+            appendLine("Fork/IPC real: ${if (ipcProof) "aprovado" else "não comprovado"}")
+            appendLine("Addon Copilot nativo: ${if (nativeAddonProof) "carregado" else "não comprovado"}")
+            append("Chat/Agent autenticados: não testados neste diagnóstico")
+        }
+    }
+
     /** Presence is not proof of a runnable server. Integrity/startup checks follow. */
     fun hasBundle(): Boolean = try {
         context.assets.open(ARCHIVE).use { }
