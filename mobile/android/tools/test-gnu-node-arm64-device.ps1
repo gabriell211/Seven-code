@@ -23,9 +23,9 @@ if ($devices.Count -ne 1) {
     throw "Conecte exatamente UM Android ARM64 físico com depuração USB autorizada. ADB: $($devices.Count) dispositivos."
 }
 $serial = ([regex]::Match($devices[0], '^([^\s]+)')).Groups[1].Value
-function Device([string[]]$Args) {
-    $result = @(& adb -s $serial @Args 2>$null)
-    if ($LASTEXITCODE -ne 0) { throw "ADB falhou ao executar: $($Args[0])" }
+function Device([string[]]$Parts) {
+    $result = @(& adb -s $serial @Parts 2>$null)
+    if ($LASTEXITCODE -ne 0) { throw "ADB falhou ao executar: $($Parts[0])" }
     return ($result -join [Environment]::NewLine).Trim()
 }
 $abi = Device @('shell', 'getprop', 'ro.product.cpu.abi')
@@ -58,7 +58,7 @@ while ((Get-Date) -lt $deadline) {
     $version = Read-Probe 'gnu-node-version-probe.log'
     $ipc = Read-Probe 'gnu-node-fork-probe.log'
     if ($version -match '^v[0-9]+\.' -and $ipc -match 'SEVEN_GNU_FORK_IPC_OK') {
-        Write-Host "APROVADO NO DISPOSITIVO: GNU Node $($Matches[0]) e IPC real child_process.fork."
+        Write-Host "APROVADO NO DISPOSITIVO: GNU Node $($version -split '\s+')[0] e IPC real child_process.fork."
         Write-Host "ABI e proveniência: $(Read-Probe 'gnu-platform-probe.txt')"
         Write-Host 'Isso NÃO homologa o Copilot Agent nem o workbench completo.'
         exit 0
@@ -69,7 +69,8 @@ $platform = Read-Probe 'gnu-platform-probe.txt'
 $version = Read-Probe 'gnu-node-version-probe.log'
 $ipc = Read-Probe 'gnu-node-fork-probe.log'
 function Redact([string]$Value) {
-    return ([regex]::Replace($Value, '[a-fA-F0-9]{64}', '[redacted-token]')).Substring(0, [Math]::Min(700, $Value.Length))
+    $clean = [regex]::Replace($Value, '[a-fA-F0-9]{64}', '[redacted-token]')
+    return $clean.Substring(0, [Math]::Min(700, $clean.Length))
 }
 Write-Warning "GNU Node não passou no ARM64 físico. Fase: $(Redact $phase)"
 Write-Host "Plataforma: $(Redact $platform)"
