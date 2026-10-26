@@ -21,7 +21,7 @@ test('Android exposes the original Code OSS Chat and an explicit Copilot status 
 
 test('Copilot authentication and Agent remain unverified until device E2E', () => {
   assert.match(source, /modelos.*Copilot|modelos Copilot|Copilot Chat/);
-  assert.match(source, /O Web Workbench isolado não executa extensões Node\.js/);
+  assert.match(source, /Workbench isolado não executa extensões Node\.js/);
   assert.doesNotMatch(source, /https:\/\/api\.github\.com\/copilot/);
 });
 
