@@ -8,7 +8,7 @@ import { TextEncoder, TextDecoder } from 'node:util';
 const extension = readFileSync('extensions/seven-code-mobile-terminal/dist/browser/extension.js', 'utf8');
 const manifest = JSON.parse(readFileSync('extensions/seven-code-mobile-terminal/package.json', 'utf8'));
 
-function harness({ native = true, workspaceRoot = '/project', copilot = false } = {}) {
+function harness({ native = true, workspaceRoot = '/project', copilot = false, github = false, models = false } = {}) {
     class Channel {
         static all = new Set();
         constructor(name) { this.name = name; this.onmessage = null; Channel.all.add(this); }
@@ -65,15 +65,29 @@ function harness({ native = true, workspaceRoot = '/project', copilot = false } 
             },
             async executeCommand(id) { calls.push(id); }
         },
+        authentication: {
+            async getSession(provider, scopes, options) {
+                assert.equal(provider, 'github');
+                assert.deepEqual(Array.from(scopes), ['read:user', 'user:email']);
+                calls.push('authentication.getSession');
+                return github ? { account: { label: 'fixture.user' }, accessToken: 'TEST_SECRET_DO_NOT_DISPLAY' } : undefined;
+            }
+        },
         extensions: { getExtension: id => id === 'GitHub.copilot-chat' && copilot
             ? { isActive: true } : undefined },
         lm: { registerTool(id, impl) {
             tools.set(id, impl);
             return { dispose() { tools.delete(id); } };
+        },
+        async selectChatModels(query) {
+            assert.equal(query.vendor, 'copilot');
+            calls.push('languageModels.selectChatModels');
+            return models ? [{ vendor: 'copilot', id: 'fixture-model' }] : [];
         }},
         window: {
             registerTerminalProfileProvider() { return { dispose() {} }; },
             async showWarningMessage(text) { messages.push({ severity: 'warning', text }); },
+            async showErrorMessage(text) { messages.push({ severity: 'error', text }); },
             async showInformationMessage(text) { messages.push({ severity: 'info', text }); }
         }
     };
@@ -166,5 +180,36 @@ test('commands and workspace reading are inactive outside trusted native Android
     const app = harness({ native: false }); await app.activate();
     assert.equal(app.command('sevenCode.openCopilotChat'), undefined);
     assert.equal(app.tool(FILE), undefined);
+    app.close();
+});
+
+test('Use AI Features button checks active GitHub session rather than assuming external device success', async () => {
+    const app = harness({ copilot: true }); await app.activate();
+    await app.command('sevenCode.configureAndroidAiFeatures')();
+    assert.deepEqual(app.calls, ['authentication.getSession']);
+    assert.match(app.messages[0].text, /GitHub ainda não confirmou uma sessão/);
+    assert.ok(app.messages.every(m => !m.text.includes('TEST_SECRET_DO_NOT_DISPLAY')));
+    app.close();
+});
+
+test('Use AI Features button gives honest missing Copilot host diagnosis after GitHub session', async () => {
+    const app = harness({ github: true }); await app.activate();
+    await app.command('sevenCode.configureAndroidAiFeatures')();
+    assert.match(app.messages[0].text, /host de extensões não carregou o Copilot Chat oficial/);
+    assert.deepEqual(app.calls, ['authentication.getSession']);
+    assert.ok(app.messages.every(m => !m.text.includes('TEST_SECRET_DO_NOT_DISPLAY')));
+    app.close();
+});
+
+test('Use AI Features button opens original Chat only after official model is actually registered', async () => {
+    const app = harness({ github: true, copilot: true, models: true }); await app.activate();
+    await app.command('sevenCode.configureAndroidAiFeatures')();
+    assert.deepEqual(app.calls, [
+        'authentication.getSession',
+        'languageModels.selectChatModels',
+        'workbench.action.chat.open'
+    ]);
+    assert.match(app.messages[0].text, /modelo Copilot detectado/);
+    assert.ok(app.messages.every(m => !m.text.includes('TEST_SECRET_DO_NOT_DISPLAY')));
     app.close();
 });
