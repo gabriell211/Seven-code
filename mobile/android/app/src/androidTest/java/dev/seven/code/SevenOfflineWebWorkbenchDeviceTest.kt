@@ -1,6 +1,8 @@
 package dev.seven.code
 
 import android.os.SystemClock
+import android.content.pm.ActivityInfo
+import android.content.res.Configuration
 import android.graphics.Bitmap
 import java.io.File
 import android.webkit.WebView
@@ -16,6 +18,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.uiautomator.UiDevice
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.util.concurrent.CountDownLatch
@@ -125,6 +128,97 @@ class SevenOfflineWebWorkbenchDeviceTest {
         }
     }
     @Test
+    fun rotatingAndroidDoesNotRestartCodeOssOrDestroyUnsavedEditorState() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val bundled = try {
+            context.assets.open("seven-web/bundle.json").use { true }
+        } catch (_: java.io.IOException) { false }
+        assumeTrue("Rotation E2E requires the original bundled Code OSS", bundled)
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            val beforeActivity = AtomicReference<MainActivity>()
+            val beforeWebView = AtomicReference<WebView>()
+            var markerStored = false
+            for (attempt in 0 until 80) {
+                val done = CountDownLatch(1)
+                val result = AtomicReference<String>("false")
+                scenario.onActivity { activity ->
+                    val web = activity.findViewById<android.view.ViewGroup>(android.R.id.content)
+                        .getChildAt(0) as? WebView
+                    if (web == null) {
+                        done.countDown()
+                        return@onActivity
+                    }
+                    web.evaluateJavascript(
+                        """(function() {
+                            if (!document.querySelector('.monaco-workbench')) return false;
+                            document.documentElement.dataset.sevenRotationProof = 'unsaved-editor-state-kept';
+                            return true;
+                        })()"""
+                    ) {
+                        if (it == "true") {
+                            beforeActivity.set(activity)
+                            beforeWebView.set(web)
+                        }
+                        result.set(it)
+                        done.countDown()
+                    }
+                }
+                if (done.await(4, TimeUnit.SECONDS) && result.get() == "true") {
+                    markerStored = true
+                    break
+                }
+                SystemClock.sleep(500)
+            }
+            assertTrue("Code OSS did not boot before screen rotation", markerStored)
+
+            for (orientation in listOf(
+                ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE,
+                ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            )) {
+                scenario.onActivity { activity ->
+                    activity.requestedOrientation = orientation
+                }
+                val expected = if (orientation == ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE)
+                    Configuration.ORIENTATION_LANDSCAPE else Configuration.ORIENTATION_PORTRAIT
+                var preserved = false
+                var diagnostic = "No configuration result"
+                for (attempt in 0 until 50) {
+                    val done = CountDownLatch(1)
+                    val same = AtomicReference(false)
+                    scenario.onActivity { activity ->
+                        val web = activity.findViewById<android.view.ViewGroup>(android.R.id.content)
+                            .getChildAt(0) as? WebView
+                        val orientationNow = activity.resources.configuration.orientation
+                        if (web == null || activity !== beforeActivity.get() || web !== beforeWebView.get()) {
+                            diagnostic = "Activity or Chromium WebView recreated"
+                            done.countDown()
+                            return@onActivity
+                        }
+                        if (orientationNow != expected) {
+                            diagnostic = "Awaiting orientation " + expected + ", observed " + orientationNow
+                            done.countDown()
+                            return@onActivity
+                        }
+                        web.evaluateJavascript(
+                            "document.documentElement.dataset.sevenRotationProof === 'unsaved-editor-state-kept' && !!document.querySelector('.monaco-workbench')"
+                        ) {
+                            same.set(it == "true")
+                            diagnostic = "DOM marker preserved: " + it
+                            done.countDown()
+                        }
+                    }
+                    if (done.await(4, TimeUnit.SECONDS) && same.get()) {
+                        preserved = true
+                        break
+                    }
+                    SystemClock.sleep(350)
+                }
+                assertTrue("Code OSS restarted or lost live state when rotated: $diagnostic", preserved)
+            }
+        }
+    }
+
+    @Test
     fun androidSystemKeyboardOpensForRealFocusedWebViewTextarea() {
         // This is an on-emulator test of Chromium -> trusted WebMessageListener
         // -> Android InputMethodManager. It NEVER installs a custom keyboard.
@@ -164,11 +258,16 @@ class SevenOfflineWebWorkbenchDeviceTest {
                                 input = document.createElement('textarea');
                                 input.id = 'seven-ime-e2e';
                                 input.style.cssText =
-                                  'position:fixed;bottom:12px;left:12px;width:160px;height:42px;z-index:20';
-                                document.querySelector('.monaco-workbench').append(input);
+                                  'position:fixed;top:calc(50% - 21px);left:calc(50% - 80px);' +
+                                  'width:160px;height:42px;z-index:2147483647;opacity:1;' +
+                                  'pointer-events:auto;background:#fff;color:#000;border:3px solid #087aca';
+                                // Do not append to .monaco-workbench: it can have
+                                // clipping/stacking contexts above the editor,
+                                // especially after a landscape reflow. A true
+                                // user touch must actually hit this textarea.
+                                document.body.append(input);
                             }
-                            input.focus();
-                            return document.activeElement === input;
+                            return !!input && input.getBoundingClientRect().width > 0;
                         })()"""
                     ) {
                         result.set(it)
@@ -181,7 +280,25 @@ class SevenOfflineWebWorkbenchDeviceTest {
                 }
                 SystemClock.sleep(500)
             }
-            assertTrue("Chromium could not focus its original WebView text input", focused)
+            assertTrue("The genuine Code OSS WebView did not render the IME test input", focused)
+            // Android WebView may legally refuse to display a keyboard for
+            // programmatic JS input.focus() without a real user gesture.
+            // Simulate an actual finger tap on the visible textarea instead.
+            // This proves the same path the user's Android keyboard uses.
+            val tap = AtomicReference<Pair<Int, Int>?>(null)
+            scenario.onActivity { activity ->
+                val web = activity.findViewById<android.view.ViewGroup>(
+                    android.R.id.content).getChildAt(0) as? WebView
+                if (web != null) {
+                    val position = IntArray(2)
+                    web.getLocationOnScreen(position)
+                    tap.set(Pair(position[0] + web.width / 2, position[1] + web.height / 2))
+                }
+            }
+            val target = tap.get() ?: throw AssertionError(
+                "No WebView center available for real user IME tap")
+            assertTrue("Android could not tap the real editor field",
+                UiDevice.getInstance(instrumentation).click(target.first, target.second))
             var keyboardVisible = false
             for (attempt in 0 until 35) {
                 scenario.onActivity { activity ->
@@ -193,8 +310,35 @@ class SevenOfflineWebWorkbenchDeviceTest {
                 if (keyboardVisible) break
                 SystemClock.sleep(500)
             }
+            val focusDiagnostic = AtomicReference("unknown")
+            val focusedInDom = AtomicReference(false)
+            val diagnosticLatch = CountDownLatch(1)
+            scenario.onActivity { activity ->
+                val root = activity.findViewById<android.view.ViewGroup>(android.R.id.content)
+                val web = root.getChildAt(0) as? WebView
+                val native = "nativeFocus=${web?.hasFocus()}, windowFocus=${web?.hasWindowFocus()}"
+                if (web == null) {
+                    focusDiagnostic.set(native + ", WebView missing")
+                    diagnosticLatch.countDown()
+                } else {
+                    web.evaluateJavascript(
+                        "document.activeElement?.id === 'seven-ime-e2e'"
+                    ) { js ->
+                        focusedInDom.set(js == "true")
+                        focusDiagnostic.set(native + ", domTextareaFocus=" + js)
+                        diagnosticLatch.countDown()
+                    }
+                }
+            }
+            diagnosticLatch.await(5, TimeUnit.SECONDS)
             assertTrue(
-                "The trusted Code OSS WebView focus did not open the configured Android system keyboard",
+                "Real finger tap never focused the actual Code OSS HTML textarea: " +
+                    focusDiagnostic.get(),
+                focusedInDom.get()
+            )
+            assertTrue(
+                "HTML textarea has real focus but the Android IME is not visible: " +
+                    focusDiagnostic.get(),
                 keyboardVisible
             )
             // Keyboard visibility does not imply its input reaches Chromium.

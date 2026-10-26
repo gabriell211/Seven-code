@@ -634,7 +634,14 @@ export class ChatStatusDashboard extends DomWidget {
 
 		const button = this._store.add(new Button(this.element, { ...defaultButtonStyles, hoverDelegate: nativeHoverDelegate }));
 		button.label = buttonLabel;
-		this._store.add(button.onDidClick(() => this.runCommandAndClose(commandId)));
+		// The desktop chat setup command requires a host environment that is
+		// unavailable inside the Android WebView preview. Dispatch to the
+		// registered Android extension instead; it validates the real GitHub
+		// session and reports whether an official Copilot model is available.
+		// Unmodified desktop and normal browser Code OSS keep upstream setup.
+		const androidAction = typeof window !== 'undefined' && 'SevenTerminalNative' in window
+			? 'sevenCode.configureAndroidAiFeatures' : commandId;
+		this._store.add(button.onDidClick(() => this.runCommandAndClose(androidAction)));
 	}
 
 	private renderInlineSuggestionsContent(container: HTMLElement): void {

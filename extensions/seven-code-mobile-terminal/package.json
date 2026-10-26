@@ -23,7 +23,11 @@
     "onCommand:sevenCode.copilotAgentAcceptance",
     "onCommand:sevenCode.openAndroidFile",
     "onCommand:sevenCode.newAndroidFile",
-    "onCommand:sevenCode.newAndroidFolder"
+    "onCommand:sevenCode.newAndroidFolder",
+    "onCommand:sevenCode.githubSessionStatus",
+    "onCommand:sevenCode.androidGitStatus",
+    "onCommand:sevenCode.configureAndroidAiFeatures",
+    "onCommand:sevenCode.openAndroidTerminal"
   ],
   "capabilities": {
     "virtualWorkspaces": true,
@@ -88,6 +92,26 @@
       {
         "command": "sevenCode.newAndroidFolder",
         "title": "Seven Code: Nova pasta no celular",
+        "category": "Seven Code"
+      },
+      {
+        "command": "sevenCode.githubSessionStatus",
+        "title": "Seven Code: Verificar sessão GitHub no celular",
+        "category": "Seven Code"
+      },
+      {
+        "command": "sevenCode.androidGitStatus",
+        "title": "Seven Code: Diagnóstico de sincronização Git Android",
+        "category": "Seven Code"
+      },
+      {
+        "command": "sevenCode.configureAndroidAiFeatures",
+        "title": "Seven Code: Ativar IA no Android (verificar GitHub e Copilot)",
+        "category": "Seven Code"
+      },
+      {
+        "command": "sevenCode.openAndroidTerminal",
+        "title": "Seven Code: Abrir terminal Android",
         "category": "Seven Code"
       }
     ],
@@ -176,6 +200,24 @@
         },
         {
           "command": "sevenCode.newAndroidFolder"
+        },
+        {
+          "command": "sevenCode.githubSessionStatus"
+        },
+        {
+          "command": "sevenCode.androidGitStatus"
+        },
+        {
+          "command": "sevenCode.configureAndroidAiFeatures"
+        },
+        {
+          "command": "sevenCode.openAndroidTerminal"
+        }
+      ],
+      "menubar/terminal": [
+        {
+          "command": "sevenCode.openAndroidTerminal",
+          "group": "1_create@1"
         }
       ]
     }

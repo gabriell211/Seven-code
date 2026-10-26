@@ -20,6 +20,7 @@ interface IGitHubDeviceCodeResponse {
 	user_code: string;
 	verification_uri: string;
 	interval: number;
+	expires_in?: number;
 }
 
 interface IFlowOptions {
@@ -477,10 +478,22 @@ class DeviceCodeFlow implements IFlow {
 				query: `client_id=${Config.gitHubClientId}&device_code=${json.device_code}&grant_type=urn:ietf:params:oauth:grant-type:device_code`
 			});
 
-			// Try for 2 minutes
-			const deadline = Date.now() + 120_000;
+			// GitHub normally grants the user up to 15 minutes to approve the
+			// device code. A two-minute timer breaks Android sign-in when the
+			// user switches to an external browser, reads the code and returns.
+			// Never outlive the server-provided expiry, and always honor cancel.
+			const expiresIn = Number(json.expires_in);
+			const validSeconds = Number.isFinite(expiresIn) && expiresIn >= 60
+				? Math.min(900, Math.floor(expiresIn)) : 900;
+			const deadline = Date.now() + validSeconds * 1000;
 			for (let i = 0; Date.now() < deadline; i++) {
-				await new Promise(resolve => setTimeout(resolve, json.interval * 1000));
+				const remaining = deadline - Date.now();
+				if (remaining <= 0) break;
+				await new Promise(resolve => setTimeout(resolve,
+					Math.min(Math.max(1, json.interval) * 1000, remaining)));
+				// WebView timers may be paused while an external browser is open.
+				// Upon returning, resume with the original code instead of starting
+				// a new login and losing the pending authorization.
 				if (token.isCancellationRequested) {
 					throw new Error(USER_CANCELLATION_ERROR);
 				}
@@ -517,9 +530,12 @@ class DeviceCodeFlow implements IFlow {
 				}
 
 				if (accessTokenJson.error) {
-					throw new Error(accessTokenJson.error_description);
+					throw new Error(accessTokenJson.error_description || accessTokenJson.error);
 				}
 
+				if (typeof accessTokenJson.access_token !== 'string' || !accessTokenJson.access_token) {
+					throw new Error('GitHub did not return an access token for this device authorization.');
+				}
 				return accessTokenJson.access_token;
 			}
 

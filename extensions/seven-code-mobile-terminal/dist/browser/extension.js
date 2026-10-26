@@ -428,6 +428,53 @@ class SevenAndroidWorkspaceContext {
 // mock response or silently redirect code context to a third-party chatbot.
 // Use Code OSS's original registered GitHub AuthenticationProvider; no
 // homegrown login state, OAuth access token cache or external server.
+// OAuth success in the system browser is not the same thing as an active
+// vscode.AuthenticationSession in the extension host. Query the official
+// provider without requesting another OAuth authorization or exposing tokens.
+async function showGitHubSessionStatus() {
+    if (typeof vscode.authentication?.getSession !== 'function') {
+        await vscode.window.showWarningMessage(
+            'GitHub Authentication não está registrado no editor Android. ' +
+            'Verifique se a extensão de autenticação Web iniciou.'
+        );
+        return;
+    }
+    try {
+        const session = await vscode.authentication.getSession(
+            'github', ['read:user', 'user:email'], { createIfNone: false }
+        );
+        if (!session?.account?.label) {
+            await vscode.window.showWarningMessage(
+                'O navegador pode ter concluído a autorização, mas o Seven Code ' +
+                'ainda não recebeu uma sessão GitHub. Volte ao aplicativo e aguarde ' +
+                'a conclusão da verificação; se ela expirou, inicie outro login.'
+            );
+            return;
+        }
+        await vscode.window.showInformationMessage(
+            'Sessão GitHub confirmada dentro do Seven Code: ' + session.account.label +
+            '. Isso valida o login, mas não significa que o Git local ou o Copilot ' +
+            'já estejam funcionando. Abra Diagnóstico do Copilot para conferir.'
+        );
+    } catch {
+        await vscode.window.showWarningMessage(
+            'Não foi possível verificar a sessão pelo provedor GitHub Web. ' +
+            'Nenhum token foi exibido ou copiado.'
+        );
+    }
+}
+
+async function showAndroidGitStatus() {
+    const scm = (vscode.scm && vscode.scm.inputBox) ? 'disponível' : 'não detectado';
+    await vscode.window.showInformationMessage(
+        'Controle de versão Android: login GitHub e Git local são recursos ' +
+        'diferentes. Este APK Web não inclui um servidor Git/Node nativo. ' +
+        'A abertura de uma pasta do celular não registra automaticamente um ' +
+        'repositório Git no painel de controle de código-fonte. ' +
+        'Interface SCM: ' + scm + '.'
+    );
+}
+
 async function signInToGitHub() {
     if (!vscode.authentication?.getSession) {
         await vscode.window.showErrorMessage('O provedor GitHub original não está disponível neste Workbench.');
@@ -566,14 +613,78 @@ async function openCopilotChat() {
     }
 }
 
+async function configureAndroidAiFeatures() {
+    if (typeof vscode.authentication?.getSession !== 'function') {
+        await vscode.window.showErrorMessage(
+            'O provedor GitHub não foi registrado no host Web do Seven Code. ' +
+            'Os recursos de IA ainda não podem ser ativados.'
+        );
+        return;
+    }
+    let session;
+    try {
+        session = await vscode.authentication.getSession(
+            'github', ['read:user', 'user:email'], { createIfNone: true }
+        );
+    } catch {
+        await vscode.window.showErrorMessage(
+            'A autorização no navegador não concluiu uma sessão no Seven Code. ' +
+            'Retorne ao aplicativo, aguarde a confirmação e tente novamente.'
+        );
+        return;
+    }
+    if (!session?.account?.label) {
+        await vscode.window.showWarningMessage(
+            'O GitHub ainda não confirmou uma sessão no Seven Code. ' +
+            'O código aprovado no navegador não ativa sozinho o Copilot.'
+        );
+        return;
+    }
+    const extension = vscode.extensions?.getExtension?.('GitHub.copilot-chat');
+    if (!extension) {
+        await vscode.window.showWarningMessage(
+            'GitHub conectado: ' + session.account.label + '. Porém o host ' +
+            'de extensões não carregou o Copilot Chat oficial. Este APK Web ' +
+            'não fornece o runtime Node completo do desktop.'
+        );
+        return;
+    }
+    let models = [];
+    try {
+        if (typeof vscode.lm?.selectChatModels === 'function') {
+            models = await vscode.lm.selectChatModels({ vendor: 'copilot' });
+        }
+    } catch {
+        models = [];
+    }
+    if (!models.some(model => model.vendor === 'copilot')) {
+        await vscode.window.showWarningMessage(
+            'GitHub conectado como ' + session.account.label +
+            ', mas nenhum modelo Copilot está disponível neste host. ' +
+            'O botão não ativa sugestões sem um provedor oficial carregado. ' +
+            'Verifique assinatura e runtime da extensão.'
+        );
+        return;
+    }
+    await vscode.commands.executeCommand('workbench.action.chat.open');
+    await vscode.window.showInformationMessage(
+        'GitHub conectado e modelo Copilot detectado. Confirme uma resposta ' +
+        'real no Chat antes de considerar a IA homologada.'
+    );
+}
+
 async function showCopilotStatus() {
     const extension = vscode.extensions?.getExtension?.('GitHub.copilot-chat');
     const workspace = (vscode.workspace?.workspaceFolders || [])
         .some(folder => folder.uri.scheme === FILES_SCHEME);
     const message = extension
-        ? 'Copilot Chat instalado (' + (extension.isActive ? 'ativo' : 'não ativo') +
-          '). A autenticação e o Agent devem ser testados no dispositivo.'
-        : 'Copilot Chat oficial não está instalado/ativado no host Android. O Web Workbench isolado não executa extensões Node.js.';
+        ? 'Extensão oficial do Copilot encontrada (' +
+          (extension.isActive ? 'ativada' : 'não ativada') +
+          '). A presença da extensão e um login GitHub NÃO comprovam acesso ' +
+          'a modelos. O build Web isolado não executa o runtime Node.js ' +
+          'completo exigido por alguns recursos de Agent.'
+        : 'Nenhuma extensão de Copilot Chat ativa foi encontrada. O Web ' +
+          'Workbench isolado não executa extensões Node.js do desktop.';
     await vscode.window.showInformationMessage(
         message + ' Pasta Android aberta: ' + (workspace ? 'sim' : 'não') + '.'
     );
@@ -715,6 +826,49 @@ async function openAndroidFile(files) {
     }
 }
 
+// Android's built-in /system/bin/sh is a native PTY in our sandbox, not
+// PowerShell or a desktop bash emulator. Always expose a direct terminal
+// command so touch users can open it even when the web shell profile picker
+// cannot enumerate native extension-contributed profiles.
+const ANDROID_TERMINAL_PROFILE_NAME = 'Android (Seven Code)';
+
+async function openAndroidTerminal() {
+    if (typeof vscode.window?.createTerminal !== 'function') {
+        await vscode.window.showErrorMessage(
+            'O runtime de terminais Code OSS não está disponível neste APK.'
+        );
+        return;
+    }
+    try {
+        const terminal = vscode.window.createTerminal({
+            name: 'Android • Seven Code',
+            pty: new SevenAndroidPty()
+        });
+        terminal.show(false);
+    } catch {
+        await vscode.window.showErrorMessage(
+            'Não foi possível abrir o terminal Android. Confira se o ' +
+            'runtime de PTY nativo está instalado e ativo.'
+        );
+    }
+}
+
+async function setAndroidTerminalDefault() {
+    // Only the authorized native Android host enters activate(). Avoid
+    // overriding an intentional custom profile, or any PC user setting.
+    try {
+        const config = vscode.workspace.getConfiguration('terminal.integrated');
+        const configured = config.get('defaultProfile.linux');
+        if (!configured) {
+            await config.update('defaultProfile.linux', ANDROID_TERMINAL_PROFILE_NAME,
+                vscode.ConfigurationTarget.Global);
+        }
+    } catch {
+        // Some Code OSS Web builds reject shell profile settings. The direct
+        // Seven Code: Abrir terminal Android action remains fully functional.
+    }
+}
+
 async function activate(context) {
     if (!(await hasNativeHost())) return;
     if (typeof vscode.workspace?.registerFileSystemProvider === 'function' &&
@@ -745,6 +899,12 @@ async function activate(context) {
             'sevenCode.githubSignIn', signInToGitHub
         ));
         context.subscriptions.push(vscode.commands.registerCommand(
+            'sevenCode.githubSessionStatus', showGitHubSessionStatus
+        ));
+        context.subscriptions.push(vscode.commands.registerCommand(
+            'sevenCode.androidGitStatus', showAndroidGitStatus
+        ));
+        context.subscriptions.push(vscode.commands.registerCommand(
             'sevenCode.copilotLiveAcceptance', verifyGitHubAndCopilotLive
         ));
         context.subscriptions.push(vscode.commands.registerCommand(
@@ -752,6 +912,12 @@ async function activate(context) {
         ));
         context.subscriptions.push(vscode.commands.registerCommand(
             'sevenCode.copilotStatus', showCopilotStatus
+        ));
+        context.subscriptions.push(vscode.commands.registerCommand(
+            'sevenCode.configureAndroidAiFeatures', configureAndroidAiFeatures
+        ));
+        context.subscriptions.push(vscode.commands.registerCommand(
+            'sevenCode.openAndroidTerminal', openAndroidTerminal
         ));
     }
     if (typeof vscode.lm?.registerTool === 'function' &&
@@ -779,6 +945,9 @@ async function activate(context) {
             });
         },
     }));
+    // Set the real Android PTY as the default for new terminals when no
+    // deliberate default is configured. Failure does not block direct open.
+    await setAndroidTerminalDefault();
 }
 function deactivate() {}
 module.exports = { activate, deactivate };

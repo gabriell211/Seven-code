@@ -17,10 +17,10 @@ test('unmodified Seven Code keeps the original package ID and release name', () 
 
 test('test Web preview is separately installable, with isolated Android sandbox and unmistakable label', () => {
     assert.match(gradle, /gradleProperty\("sevenPreviewIsolated"\)/);
-    assert.match(gradle, /applicationIdSuffix = "\.preview"/);
-    assert.match(gradle, /versionCode = 3/);
-    assert.match(gradle, /versionName = "0\.2\.0-preview\.3"/);
-    assert.match(gradle, /manifestPlaceholders\["sevenAppLabel"\] = "Seven Code Preview"/);
+    assert.match(gradle, /applicationIdSuffix = "\.preview4"/);
+    assert.match(gradle, /versionCode = 4/);
+    assert.match(gradle, /versionName = "0\.2\.0-preview\.4"/);
+    assert.match(gradle, /manifestPlaceholders\["sevenAppLabel"\] = "Seven Code Preview 4"/);
     assert.match(workflow, /:app:assembleDebug -PsevenPreviewIsolated=true/);
     assert.match(emulator, /connectedDebugAndroidTest[\s\S]*-PsevenPreviewIsolated=true/);
 });
@@ -29,8 +29,10 @@ test('Android packaging must reject malformed signatures and prove old and new a
     assert.match(workflow, /apksigner" verify --verbose --print-certs/);
     assert.match(workflow, /aapt" dump badging/);
     assert.match(emulator, /gh release download v0\.2\.0-android-web-preview\.2/);
+    assert.match(emulator, /gh release download v0\.2\.0-android-web-preview\.3/);
+    assert.match(emulator, /adb shell pm path dev\.seven\.code\.preview \| grep/);
     assert.match(emulator, /adb install -r "\$new_apk"/);
-    assert.match(emulator, /adb shell pm path dev\.seven\.code\.preview/);
+    assert.match(emulator, /adb shell pm path dev\.seven\.code\.preview4/);
     assert.match(emulator, /adb shell pm path dev\.seven\.code \| grep/);
     assert.doesNotMatch(emulator, /adb uninstall dev\.seven\.code(?:\s|$)/m);
 });

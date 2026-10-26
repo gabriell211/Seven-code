@@ -20,8 +20,8 @@ test('Android exposes the original Code OSS Chat and an explicit Copilot status 
 });
 
 test('Copilot authentication and Agent remain unverified until device E2E', () => {
-  assert.match(source, /A autenticação e o Agent devem ser testados no dispositivo/);
-  assert.match(source, /não está ativo no host de extensões Android/);
+  assert.match(source, /modelos.*Copilot|modelos Copilot|Copilot Chat/);
+  assert.match(source, /Workbench isolado não executa extensões Node\.js/);
   assert.doesNotMatch(source, /https:\/\/api\.github\.com\/copilot/);
 });
 
@@ -44,5 +44,19 @@ test('Live Copilot acceptance requires real GitHub /user and streamed real model
   assert.match(source, /for await \(const chunk of response\.text\)/);
   assert.match(source, /sevenCode\.copilotAgentAcceptance/);
   assert.match(source, /SEVEN_CODE_AGENT_REAL_OK/);
+  assert.doesNotMatch(source, /FAKE[_-]COPILOT|mockResponse|fakeCompletion/i);
+});
+
+test('Android AI dashboard button is an actionable host-specific GitHub/Copilot readiness check', () => {
+  const dashboard = readFileSync('src/vs/workbench/contrib/chat/browser/chatStatus/chatStatusDashboard.ts', 'utf8');
+  assert.match(dashboard, /'sevenCode.configureAndroidAiFeatures'/);
+  assert.match(dashboard, /'SevenTerminalNative' in window/);
+  assert.match(dashboard, /: commandId/);
+  assert.ok(manifest.activationEvents.includes('onCommand:sevenCode.configureAndroidAiFeatures'));
+  assert.ok(manifest.contributes.commands.some(c => c.command === 'sevenCode.configureAndroidAiFeatures'));
+  assert.match(source, /sevenCode.configureAndroidAiFeatures/);
+  assert.match(source, /createIfNone: true/);
+  assert.match(source, /vscode\.lm\.selectChatModels\(\{ vendor: 'copilot' \}\)/);
+  assert.match(source, /nenhum modelo Copilot está disponível neste host/);
   assert.doesNotMatch(source, /FAKE[_-]COPILOT|mockResponse|fakeCompletion/i);
 });

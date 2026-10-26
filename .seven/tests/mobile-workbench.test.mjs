@@ -45,9 +45,28 @@ class FakeChannel {
 function launch(withNative) {
     FakeChannel.entries.clear();
     let provider;
+    const commands = new Map();
+    const openedTerminals = [];
+    const updatedDefaults = [];
     const vscode = {
         UIKind: { Web: 2 },
+        ConfigurationTarget: { Global: 1 },
         env: { uiKind: 2 },
+        commands: {
+            registerCommand(id, cb) {
+                commands.set(id, cb);
+                return { dispose() { commands.delete(id); } };
+            }
+        },
+        workspace: {
+            getConfiguration(section) {
+                assert.equal(section, 'terminal.integrated');
+                return {
+                    get(name) { return undefined; },
+                    async update(name, value, target) { updatedDefaults.push({ name, value, target }); }
+                };
+            }
+        },
         EventEmitter: class {
             constructor() { this.listeners = []; this.event = listener => {
                 this.listeners.push(listener);
@@ -58,6 +77,11 @@ function launch(withNative) {
         },
         TerminalProfile: class { constructor(options) { this.options = options; } },
         window: {
+            createTerminal(options) {
+                const opened = { options, shown: false, show() { this.shown = true; } };
+                openedTerminals.push(opened);
+                return opened;
+            },
             registerTerminalProfileProvider(_id, value) {
                 provider = value;
                 return { dispose() {} };
@@ -86,9 +110,34 @@ function launch(withNative) {
     return {
         provider: () => provider,
         activate: () => context.module.exports.activate({ subscriptions: [] }),
+        commands, openedTerminals, updatedDefaults,
         host, messages
     };
 }
+
+test('touch command opens real native Android PTY and selects profile for new terminal', async () => {
+    const app = launch(true);
+    await app.activate();
+    assert.ok(packageJson.activationEvents.includes('onCommand:sevenCode.openAndroidTerminal'));
+    assert.ok(packageJson.contributes.commands.some(c => c.command === 'sevenCode.openAndroidTerminal'));
+    assert.ok(packageJson.contributes.menus['menubar/terminal'].some(c =>
+        c.command === 'sevenCode.openAndroidTerminal'));
+    assert.deepEqual(app.updatedDefaults, [{
+        name: 'defaultProfile.linux', value: 'Android (Seven Code)', target: 1
+    }]);
+    const open = app.commands.get('sevenCode.openAndroidTerminal');
+    assert.equal(typeof open, 'function');
+    await open();
+    assert.equal(app.openedTerminals.length, 1);
+    const terminal = app.openedTerminals[0];
+    assert.equal(terminal.shown, true);
+    assert.equal(terminal.options.name, 'Android • Seven Code');
+    terminal.options.pty.open({columns: 80, rows: 24});
+    await new Promise(resolve => setTimeout(resolve, 0));
+    assert.ok(app.messages.some(m => m.type === 'start'));
+    terminal.options.pty.close();
+    app.host.close();
+});
 
 test('extension activates only when the trusted Android host replies', async () => {
     const missing = launch(false);

@@ -22,6 +22,9 @@ declare global {
 }
 const host = window.SevenTerminalNative;
 if (host && typeof BroadcastChannel !== 'undefined') {
+    // Only Android's real trusted WebView gets mobile touch presentation.
+    // Do not modify desktop Code OSS, keyboard events or browser sessions.
+    document.documentElement?.classList?.add('seven-mobile-android');
     // Original Code OSS Accounts menu: expose the existing GitHub provider's
     // native device-code sign-in command instead of a fake login page.
     // The extension command activates on demand and handles OAuth sessions.
@@ -29,6 +32,10 @@ if (host && typeof BroadcastChannel !== 'undefined') {
         MenuRegistry.appendMenuItem(MenuId.AccountsContext, {
             command: { id: 'sevenCode.githubSignIn', title: 'Entrar com GitHub (Seven Code)' },
             group: '1_seven_mobile@1'
+        }),
+        MenuRegistry.appendMenuItem(MenuId.AccountsContext, {
+            command: { id: 'sevenCode.githubSessionStatus', title: 'Verificar sessão GitHub' },
+            group: '1_seven_mobile@2'
         }),
         // Welcome/editor three-dot menu must expose actions which can operate
         // on an Android SAF workspace instead of unsupported desktop paths.
@@ -40,6 +47,14 @@ if (host && typeof BroadcastChannel !== 'undefined') {
             command: { id: 'sevenCode.newAndroidFile', title: 'Novo arquivo no celular' },
             group: 'navigation@51'
         }),
+        MenuRegistry.appendMenuItem(MenuId.EditorTitle, {
+            command: { id: 'workbench.action.files.save', title: 'Salvar arquivo' },
+            group: 'navigation@52'
+        }),
+        MenuRegistry.appendMenuItem(MenuId.EditorTitle, {
+            command: { id: 'workbench.action.showCommands', title: 'Todos os comandos' },
+            group: 'navigation@53'
+        }),
         // Chat title ellipsis: a working authentication action and an honest
         // diagnostic when the official Copilot Node host is unavailable.
         MenuRegistry.appendMenuItem(MenuId.ChatTitleBarMenu, {
@@ -49,6 +64,22 @@ if (host && typeof BroadcastChannel !== 'undefined') {
         MenuRegistry.appendMenuItem(MenuId.ChatTitleBarMenu, {
             command: { id: 'sevenCode.copilotStatus', title: 'Diagnóstico do Copilot' },
             group: '1_seven_mobile@2'
+        }),
+        MenuRegistry.appendMenuItem(MenuId.ChatTitleBarMenu, {
+            command: { id: 'sevenCode.githubSessionStatus', title: 'Verificar sessão GitHub' },
+            group: '1_seven_mobile@3'
+        }),
+        MenuRegistry.appendMenuItem(MenuId.SCMTitle, {
+            command: { id: 'sevenCode.androidGitStatus', title: 'Git Android: diagnóstico' },
+            group: '1_seven_mobile@1'
+        }),
+        MenuRegistry.appendMenuItem(MenuId.TerminalNewDropdownContext, {
+            command: { id: 'sevenCode.openAndroidTerminal', title: 'Novo terminal do celular' },
+            group: '1_seven_mobile@1'
+        }),
+        MenuRegistry.appendMenuItem(MenuId.EditorTitle, {
+            command: { id: 'sevenCode.openAndroidTerminal', title: 'Abrir terminal do celular' },
+            group: 'navigation@54'
         })
     ];
     // Monaco, xterm.js, the command palette and dialogs use real Chromium
@@ -180,6 +211,7 @@ if (host && typeof BroadcastChannel !== 'undefined') {
         document.removeEventListener('focusin', onEditorFocus, true);
         document.removeEventListener('pointerup', onEditorPointer, true);
         mobileMenuItems.forEach(item => item.dispose());
+        document.documentElement?.classList?.remove('seven-mobile-android');
         window.sevenNativeEvent = undefined;
         channel.close();
         files.close();
