@@ -122,6 +122,43 @@ internal class SevenLocalCodeOssServer(private val context: Context) {
             "Node GNU ARM64 não executou no Android: exit=${child.exitValue()}; output=$output"
         }
         bootPhase("original-gnu-node-runs-on-android")
+        probeGnuNodeForkIpc(launch)
+    }
+
+    /**
+     * A real child_process.fork() round trip, using exactly the same loader,
+     * NODE_OPTIONS bootstrap and Node executable as the Code OSS server.
+     * This runs on Android, not on the Linux CI host. A Node --version check
+     * cannot prove the extension host can spawn child Node processes.
+     */
+    private fun probeGnuNodeForkIpc(launch: SevenLocalGnuRuntime.Launch) {
+        bootPhase("probe-original-gnu-node-fork-ipc-on-android")
+        val outputFile = File(root, "gnu-node-fork-probe.log")
+        val probe = ProcessBuilder(launch.prefix + launch.forkProbe.absolutePath)
+            .directory(root)
+            .redirectErrorStream(true)
+            .redirectOutput(outputFile)
+        probe.environment().apply {
+            put("LD_LIBRARY_PATH", launch.libraryPath)
+            put("HOME", context.filesDir.absolutePath)
+            put("TMPDIR", context.cacheDir.absolutePath)
+            put("NODE_OPTIONS", "--require=${launch.bootstrap.absolutePath}")
+        }
+        val child = probe.start()
+        if (!child.waitFor(12, TimeUnit.SECONDS)) {
+            child.destroyForcibly()
+            child.waitFor(3, TimeUnit.SECONDS)
+            error("Fork/IPC do GNU Node não respondeu dentro de 12 segundos.")
+        }
+        val result = runCatching { outputFile.readText().take(1_000) }.getOrDefault("")
+            .replace(Regex("[a-fA-F0-9]{64}"), "[redacted]")
+            .replace(Regex("[\\r\\n\\t]+"), " ")
+        check(child.exitValue() == 0 &&
+            result.contains("SEVEN_GNU_FORK_IPC_OK")) {
+            "GNU Node não conseguiu criar um processo filho com IPC: " +
+                "exit=${child.exitValue()}, output=${result.take(200)}"
+        }
+        bootPhase("original-gnu-node-fork-ipc-verified")
     }
 
     private fun startVerifiedLocalServer(): String {

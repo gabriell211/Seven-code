@@ -84,7 +84,13 @@ export function bundle(server, closure) {
     cwd: join(closure, 'lib'), timeout: 300_000
   });
   assert.ok(statSync(libzip).size >= 1_000_000);
-  const gnuManifest = { ...manifest };
+  // The signed experimental APK supplies the exact Node IPC probe script.
+  // Bind it to the GNU provenance manifest so Android can verify bytes
+  // before executing it via the already-verified local ARM64 loader.
+  const forkProbe = join(project, '.seven/android/gnu-node-fork-probe.cjs');
+  const forkProbeInApk = join(assets, 'gnu-node-fork-probe.cjs');
+  copyFileSync(forkProbe, forkProbeInApk);
+  const gnuManifest = { ...manifest, nodeForkProbeSha256: sha(forkProbeInApk) };
   writeFileSync(join(assets, 'gnu-manifest.json'), JSON.stringify(gnuManifest, null, 2) + '\n');
   const noticesZip = join(assets, 'gnu-notices.zip');
   rmSync(noticesZip, { force: true });

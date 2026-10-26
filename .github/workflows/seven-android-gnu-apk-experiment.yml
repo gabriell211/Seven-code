@@ -8,6 +8,7 @@ on:
       - "mobile/android/terminal/**"
       - "mobile/android/app/build.gradle.kts"
       - ".seven/package-android-gnu-experiment.mjs"
+      - ".seven/android/gnu-node-fork-probe.cjs"
       - ".github/workflows/seven-android-gnu-apk-experiment.yml"
       - ".github/workflows/seven-android-gnu-device-e2e.yml"
       - "mobile/android/app/src/androidTest/java/dev/seven/code/SevenStandaloneGnuDeviceTest.kt"
