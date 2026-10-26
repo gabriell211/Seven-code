@@ -25,7 +25,8 @@
     "onCommand:sevenCode.newAndroidFile",
     "onCommand:sevenCode.newAndroidFolder",
     "onCommand:sevenCode.githubSessionStatus",
-    "onCommand:sevenCode.androidGitStatus"
+    "onCommand:sevenCode.androidGitStatus",
+    "onCommand:sevenCode.configureAndroidAiFeatures"
   ],
   "capabilities": {
     "virtualWorkspaces": true,
@@ -100,6 +101,11 @@
       {
         "command": "sevenCode.androidGitStatus",
         "title": "Seven Code: Diagnóstico de sincronização Git Android",
+        "category": "Seven Code"
+      },
+      {
+        "command": "sevenCode.configureAndroidAiFeatures",
+        "title": "Seven Code: Ativar IA no Android (verificar GitHub e Copilot)",
         "category": "Seven Code"
       }
     ],
@@ -194,6 +200,9 @@
         },
         {
           "command": "sevenCode.androidGitStatus"
+        },
+        {
+          "command": "sevenCode.configureAndroidAiFeatures"
         }
       ]
     }
