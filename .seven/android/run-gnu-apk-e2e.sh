@@ -5,14 +5,14 @@ set -euo pipefail
 
 abi=$(adb shell getprop ro.product.cpu.abilist | tr -d '\r')
 echo "Android ABI availability: $abi"
-primary_abi=$(adb shell getprop ro.product.cpu.abi | tr -d '\\r')
+primary_abi=$(adb shell getprop ro.product.cpu.abi | tr -d '\r')
 echo "Android primary ABI: $primary_abi"
 if [[ "$primary_abi" != "arm64-v8a" ]]; then
   echo "::error::GNU native ARM64 acceptance cannot run on primary ABI $primary_abi. Android native-bridge ARM64 translation on x86_64 is not proof of ARM64 execution."
   exit 1
 fi
 if [[ "$abi" != *arm64-v8a* ]]; then
-  echo "::error::This Android emulator does not report ARM64 translation. Cannot validate original GNU Code OSS on an unsupported CPU."
+  echo "::error::Android does not expose the required ARM64 ABI; cannot validate original GNU Node."
   exit 1
 fi
 adb shell df -h /data
