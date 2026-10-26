@@ -50,11 +50,12 @@ adb shell pm path dev.seven.code.preview | grep '^package:'
 adb shell pm path dev.seven.code | grep '^package:'
 
 # Test 3: Real original Code OSS Workbench renders and Android IME commits
-# characters into an editable HTML element while both packages are present.
+# characters into an editable HTML element, plus real Kotlin tests of concurrent
+# OAuth device grants, while both packages are present.
 gradle -p mobile/android :app:connectedDebugAndroidTest \
   --no-daemon --stacktrace \
   -PsevenPreviewIsolated=true \
-  -Pandroid.testInstrumentationRunnerArguments.class=dev.seven.code.SevenOfflineWebWorkbenchDeviceTest
+  -Pandroid.testInstrumentationRunnerArguments.class=dev.seven.code.SevenOfflineWebWorkbenchDeviceTest,dev.seven.code.SevenGitHubDeviceFlowTest
 
 # Test 4: Android Gradle Plugin may uninstall the target preview APK
 # after connectedDebugAndroidTest as part of test cleanup. This is expected,
