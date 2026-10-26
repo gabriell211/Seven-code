@@ -826,6 +826,49 @@ async function openAndroidFile(files) {
     }
 }
 
+// Android's built-in /system/bin/sh is a native PTY in our sandbox, not
+// PowerShell or a desktop bash emulator. Always expose a direct terminal
+// command so touch users can open it even when the web shell profile picker
+// cannot enumerate native extension-contributed profiles.
+const ANDROID_TERMINAL_PROFILE_NAME = 'Android (Seven Code)';
+
+async function openAndroidTerminal() {
+    if (typeof vscode.window?.createTerminal !== 'function') {
+        await vscode.window.showErrorMessage(
+            'O runtime de terminais Code OSS não está disponível neste APK.'
+        );
+        return;
+    }
+    try {
+        const terminal = vscode.window.createTerminal({
+            name: 'Android • Seven Code',
+            pty: new SevenAndroidPty()
+        });
+        terminal.show(false);
+    } catch {
+        await vscode.window.showErrorMessage(
+            'Não foi possível abrir o terminal Android. Confira se o ' +
+            'runtime de PTY nativo está instalado e ativo.'
+        );
+    }
+}
+
+async function setAndroidTerminalDefault() {
+    // Only the authorized native Android host enters activate(). Avoid
+    // overriding an intentional custom profile, or any PC user setting.
+    try {
+        const config = vscode.workspace.getConfiguration('terminal.integrated');
+        const configured = config.get('defaultProfile.linux');
+        if (!configured) {
+            await config.update('defaultProfile.linux', ANDROID_TERMINAL_PROFILE_NAME,
+                vscode.ConfigurationTarget.Global);
+        }
+    } catch {
+        // Some Code OSS Web builds reject shell profile settings. The direct
+        // Seven Code: Abrir terminal Android action remains fully functional.
+    }
+}
+
 async function activate(context) {
     if (!(await hasNativeHost())) return;
     if (typeof vscode.workspace?.registerFileSystemProvider === 'function' &&
@@ -873,6 +916,9 @@ async function activate(context) {
         context.subscriptions.push(vscode.commands.registerCommand(
             'sevenCode.configureAndroidAiFeatures', configureAndroidAiFeatures
         ));
+        context.subscriptions.push(vscode.commands.registerCommand(
+            'sevenCode.openAndroidTerminal', openAndroidTerminal
+        ));
     }
     if (typeof vscode.lm?.registerTool === 'function' &&
         typeof vscode.LanguageModelToolResult === 'function' &&
@@ -899,6 +945,9 @@ async function activate(context) {
             });
         },
     }));
+    // Set the real Android PTY as the default for new terminals when no
+    // deliberate default is configured. Failure does not block direct open.
+    await setAndroidTerminalDefault();
 }
 function deactivate() {}
 module.exports = { activate, deactivate };
