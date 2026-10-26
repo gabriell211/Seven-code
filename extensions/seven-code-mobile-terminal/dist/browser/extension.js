@@ -428,6 +428,53 @@ class SevenAndroidWorkspaceContext {
 // mock response or silently redirect code context to a third-party chatbot.
 // Use Code OSS's original registered GitHub AuthenticationProvider; no
 // homegrown login state, OAuth access token cache or external server.
+// OAuth success in the system browser is not the same thing as an active
+// vscode.AuthenticationSession in the extension host. Query the official
+// provider without requesting another OAuth authorization or exposing tokens.
+async function showGitHubSessionStatus() {
+    if (typeof vscode.authentication?.getSession !== 'function') {
+        await vscode.window.showWarningMessage(
+            'GitHub Authentication não está registrado no editor Android. ' +
+            'Verifique se a extensão de autenticação Web iniciou.'
+        );
+        return;
+    }
+    try {
+        const session = await vscode.authentication.getSession(
+            'github', ['read:user', 'user:email'], { createIfNone: false }
+        );
+        if (!session?.account?.label) {
+            await vscode.window.showWarningMessage(
+                'O navegador pode ter concluído a autorização, mas o Seven Code ' +
+                'ainda não recebeu uma sessão GitHub. Volte ao aplicativo e aguarde ' +
+                'a conclusão da verificação; se ela expirou, inicie outro login.'
+            );
+            return;
+        }
+        await vscode.window.showInformationMessage(
+            'Sessão GitHub confirmada dentro do Seven Code: ' + session.account.label +
+            '. Isso valida o login, mas não significa que o Git local ou o Copilot ' +
+            'já estejam funcionando. Abra Diagnóstico do Copilot para conferir.'
+        );
+    } catch {
+        await vscode.window.showWarningMessage(
+            'Não foi possível verificar a sessão pelo provedor GitHub Web. ' +
+            'Nenhum token foi exibido ou copiado.'
+        );
+    }
+}
+
+async function showAndroidGitStatus() {
+    const scm = (vscode.scm && vscode.scm.inputBox) ? 'disponível' : 'não detectado';
+    await vscode.window.showInformationMessage(
+        'Controle de versão Android: login GitHub e Git local são recursos ' +
+        'diferentes. Este APK Web não inclui um servidor Git/Node nativo. ' +
+        'A abertura de uma pasta do celular não registra automaticamente um ' +
+        'repositório Git no painel de controle de código-fonte. ' +
+        'Interface SCM: ' + scm + '.'
+    );
+}
+
 async function signInToGitHub() {
     if (!vscode.authentication?.getSession) {
         await vscode.window.showErrorMessage('O provedor GitHub original não está disponível neste Workbench.');
@@ -571,9 +618,13 @@ async function showCopilotStatus() {
     const workspace = (vscode.workspace?.workspaceFolders || [])
         .some(folder => folder.uri.scheme === FILES_SCHEME);
     const message = extension
-        ? 'Copilot Chat instalado (' + (extension.isActive ? 'ativo' : 'não ativo') +
-          '). A autenticação e o Agent devem ser testados no dispositivo.'
-        : 'Copilot Chat oficial não está instalado/ativado no host Android. O Web Workbench isolado não executa extensões Node.js.';
+        ? 'Extensão oficial do Copilot encontrada (' +
+          (extension.isActive ? 'ativada' : 'não ativada') +
+          '). A presença da extensão e um login GitHub NÃO comprovam acesso ' +
+          'a modelos. O build Web isolado não executa o runtime Node.js ' +
+          'completo exigido por alguns recursos de Agent.'
+        : 'Nenhuma extensão de Copilot Chat ativa foi encontrada. O Web ' +
+          'Workbench isolado não executa extensões Node.js do desktop.';
     await vscode.window.showInformationMessage(
         message + ' Pasta Android aberta: ' + (workspace ? 'sim' : 'não') + '.'
     );
@@ -743,6 +794,12 @@ async function activate(context) {
         ));
         context.subscriptions.push(vscode.commands.registerCommand(
             'sevenCode.githubSignIn', signInToGitHub
+        ));
+        context.subscriptions.push(vscode.commands.registerCommand(
+            'sevenCode.githubSessionStatus', showGitHubSessionStatus
+        ));
+        context.subscriptions.push(vscode.commands.registerCommand(
+            'sevenCode.androidGitStatus', showAndroidGitStatus
         ));
         context.subscriptions.push(vscode.commands.registerCommand(
             'sevenCode.copilotLiveAcceptance', verifyGitHubAndCopilotLive
