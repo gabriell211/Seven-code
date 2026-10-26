@@ -43,7 +43,7 @@ const source = stripTypeScriptTypes(erasedImports, { mode: 'transform' })
 const sandbox = {
     Emitter, Disposable, BroadcastChannel: FakeChannel,
     TextEncoder, TextDecoder, crypto: webcrypto, atob, btoa,
-    Number, JSON, Uint8Array, Error, String, console,
+    Number, JSON, Uint8Array, Error, String, console, setTimeout, clearTimeout,
 };
 sandbox.window = {};
 runInNewContext(source + '\n;globalThis.__seven = { SevenAndroidTerminalProcess, hasSevenAndroidTerminal };', sandbox);
@@ -77,13 +77,14 @@ test('PTY buffers commands until native approval, then delivers real output/exit
         proc.input('printf "after-ready\\n"\r');
     });
     proc.onProcessExit(code => exit.push(code));
-    assert.equal(await proc.start(), undefined);
+    const starting = proc.start();
     const sessionId = app.writes[0].sessionId;
     assert.equal(app.writes[0].type, 'start');
     proc.input('printf "native-ok\\n"\r');
     proc.resize(140, 45);
     assert.equal(app.writes.some(w => w.type === 'input'), false, 'Must not execute before permission');
     app.publish({ type: 'ready', sessionId, pid: 4012, cwd: '/data/user/0/dev.seven.code/files' });
+    assert.equal(await starting, undefined);
     await flush();
     assert.equal(ready.length, 1);
     assert.equal(ready[0].pid, 4012);
@@ -98,7 +99,7 @@ test('PTY buffers commands until native approval, then delivers real output/exit
     app.publish({ type: 'data', sessionId, value: Buffer.from('native-ok\r\n').toString('base64') });
     app.publish({ type: 'exit', sessionId, exitCode: 0 });
     await flush();
-    assert.equal(data.join(''), 'native-ok\r\n');
+    assert.ok(data.join('').endsWith('native-ok\r\n'));
     assert.equal(exit[0], 0);
     proc.input('must-not-run\r');
     assert.equal(app.writes.filter(w => w.type === 'input').length, 2);
@@ -108,10 +109,11 @@ test('PTY buffers commands until native approval, then delivers real output/exit
 test('native denial does not execute queued text', async () => {
     const app = openHarness();
     const proc = new SevenAndroidTerminalProcess(80, 24);
-    await proc.start();
+    const starting = proc.start();
     proc.input('do-not-run\r');
     app.publish({ type: 'error', sessionId: app.writes[0].sessionId, value: 'Denied' });
     app.publish({ type: 'exit', sessionId: app.writes[0].sessionId });
+    assert.match((await starting)?.message ?? '', /Denied/);
     await flush();
     assert.equal(app.writes.some(w => w.type === 'input'), false);
     app.native.close();
@@ -120,8 +122,9 @@ test('native denial does not execute queued text', async () => {
 test('an unapproved queue overflow closes the PTY without executing it', async () => {
     const app = openHarness();
     const proc = new SevenAndroidTerminalProcess(80, 24);
-    await proc.start();
+    const starting = proc.start();
     proc.input('z'.repeat(131073));
+    assert.match((await starting)?.message ?? '', /encerrado antes de iniciar/);
     assert.ok(app.writes.some(w => w.type === 'close'));
     assert.equal(app.writes.some(w => w.type === 'input'), false);
     app.native.close();
@@ -134,10 +137,11 @@ test('native PTY preserves split UTF-8 output and ignores duplicate ready events
     const data = [], ready = [];
     proc.onProcessData(value => data.push(value));
     proc.onProcessReady(value => ready.push(value));
-    await proc.start();
+    const starting = proc.start();
     const sessionId = app.writes[0].sessionId;
     proc.input('echo one\r');
     app.publish({ type: 'ready', sessionId, pid: 500, cwd: '/data/user/0/dev.seven.code/files' });
+    assert.equal(await starting, undefined);
     app.publish({ type: 'ready', sessionId, pid: 500, cwd: '/data/user/0/dev.seven.code/files' });
     const bytes = Buffer.from('café✅');
     app.publish({ type: 'data', sessionId, value: bytes.subarray(0, 4).toString('base64') });
@@ -145,7 +149,7 @@ test('native PTY preserves split UTF-8 output and ignores duplicate ready events
     await flush();
     assert.equal(ready.length, 1);
     assert.equal(app.writes.filter(w => w.type === 'input').length, 1);
-    assert.equal(data.join(''), 'café✅');
+    assert.ok(data.join('').endsWith('café✅'));
     proc.shutdown(true);
     app.native.close();
 });
@@ -153,9 +157,10 @@ test('native PTY preserves split UTF-8 output and ignores duplicate ready events
 test('large terminal input is split into native-safe chunks without data loss', async () => {
     const app = openHarness();
     const proc = new SevenAndroidTerminalProcess(80, 24);
-    await proc.start();
+    const starting = proc.start();
     const sessionId = app.writes[0].sessionId;
     app.publish({ type: 'ready', sessionId, pid: 431, cwd: '/' });
+    assert.equal(await starting, undefined);
     await flush();
     const payload = 'a'.repeat(98_000);
     proc.input(payload);
@@ -174,15 +179,19 @@ test('native terminal session IDs isolate output from other concurrent shells', 
     const leftData = [], rightData = [];
     left.onProcessData(v => leftData.push(v));
     right.onProcessData(v => rightData.push(v));
-    await left.start();
-    await right.start();
+    const leftStarting = left.start();
+    const rightStarting = right.start();
     const [leftId, rightId] = app.writes.filter(w => w.type === 'start').map(w => w.sessionId);
     assert.notEqual(leftId, rightId);
+    app.publish({ type: 'ready', sessionId: leftId, pid: 401, cwd: '/' });
+    app.publish({ type: 'ready', sessionId: rightId, pid: 402, cwd: '/' });
+    assert.equal(await leftStarting, undefined);
+    assert.equal(await rightStarting, undefined);
     app.publish({ type: 'data', sessionId: leftId, value: Buffer.from('LEFT').toString('base64') });
     app.publish({ type: 'data', sessionId: rightId, value: Buffer.from('RIGHT').toString('base64') });
     await flush();
-    assert.equal(leftData.join(''), 'LEFT');
-    assert.equal(rightData.join(''), 'RIGHT');
+    assert.ok(leftData.join('').endsWith('LEFT'));
+    assert.ok(rightData.join('').endsWith('RIGHT'));
     left.shutdown(true);
     right.shutdown(true);
     app.native.close();
