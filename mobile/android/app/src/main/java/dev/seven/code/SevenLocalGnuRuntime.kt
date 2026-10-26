@@ -136,8 +136,16 @@ internal class SevenLocalGnuRuntime(
             !manifest.getBoolean("releaseEligible")) {
             "O manifesto do runtime GNU não corresponde aos artefatos de pesquisa esperados."
         }
-        check(android.os.Build.SUPPORTED_ABIS.contains("arm64-v8a")) {
-            "O runtime GNU exige ARM64."
+        // SUPPORTED_ABIS may include arm64-v8a only because an x86_64
+        // emulator exposes native-bridge translation (Houdini/ndk_translation).
+        // Never count that as actual ARM64 Node execution. Only the primary
+        // process ABI qualifies for the GNU native runtime experiment.
+        val primaryAbi = android.os.Build.SUPPORTED_ABIS.firstOrNull()
+        check(primaryAbi == "arm64-v8a" && android.os.Process.is64Bit()) {
+            "GNU Node exige processo Android ARM64 nativo; ABI primária=" +
+                (primaryAbi ?: "ausente") +
+                ", 64-bit=" + android.os.Process.is64Bit() +
+                ". Emulação x86_64 traduzida não homologa GNU Node."
         }
         val loader = verifiedExecutable("libseven-gnu-loader.so", manifest.getString("loaderSha256"))
         val node = verifiedExecutable("libseven-gnu-node.so", manifest.getString("nodeSha256"))
