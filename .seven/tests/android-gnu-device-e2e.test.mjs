@@ -33,6 +33,9 @@ test('full GNU single APK device test uses actual prebuilt 300 MB artifact and n
   assert.match(workflow, /verify-gnu-apk\.py/);
   assert.match(workflow, /android-emulator-runner@v2/);
   assert.match(workflow, /native-arm64-codeoss:/);
+  assert.match(workflow, /installed-gnu-apk:/);
+  assert.ok(workflow.includes('if: ${{ false }}'));
+  assert.match(workflow, /SIGSYS SYS_SECCOMP/);
   assert.match(workflow, /runs-on: macos-15/);
   assert.match(workflow, /arch: arm64-v8a/);
   assert.match(workflow, /Prove this is a genuine Apple Silicon ARM64 runner/);
@@ -47,7 +50,46 @@ test('Android instrumentation requires real original Code OSS workbench DOM and 
   assert.match(android, /vscode-workbench-web-configuration|monaco-workbench/);
   assert.match(android, /Boolean\(document\.querySelector/);
   assert.match(android, /version/);
-  assert.match(android, /SUPPORTED_ABIS\.contains\("arm64-v8a"\)/);
+  assert.match(android, /SUPPORTED_ABIS\.firstOrNull\(\) == "arm64-v8a"/);
+  assert.match(android, /android\.os\.Process\.is64Bit\(\)/);
+  assert.match(bash, /ro\.product\.cpu\.abi/);
+  assert.match(bash, /GNU native ARM64 acceptance cannot run/);
+});
+
+test('GNU device diagnostic installs as an isolated APK without replacing Seven Code', () => {
+  const gradle = readFileSync('mobile/android/app/build.gradle.kts', 'utf8');
+  const gnuWorkflow = readFileSync('.github/workflows/seven-android-gnu-apk-experiment.yml', 'utf8');
+  const physical = readFileSync('.github/workflows/seven-android-physical-arm64-e2e.yml', 'utf8');
+  const testScript = readFileSync('mobile/android/tools/test-gnu-node-arm64-device.ps1', 'utf8');
+  assert.match(gradle, /sevenGnuExperiment/);
+  assert.match(gradle, /applicationIdSuffix = "\.gnu"/);
+  assert.match(gradle, /Seven Code GNU Test/);
+  assert.match(gnuWorkflow, /-PsevenGnuExperiment=true/);
+  assert.match(gnuWorkflow, /package: name='dev\.seven\.code\.gnu'/);
+  assert.match(workflow, /-PsevenGnuExperiment=true/);
+  assert.match(physical, /-PsevenGnuExperiment=true/);
+  assert.match(bash, /dev\.seven\.code\.gnu\.test\/androidx\.test\.runner\.AndroidJUnitRunner/);
+  assert.match(bash, /run-as dev\.seven\.code\.gnu/);
+  assert.match(testScript, /ro\.product\.cpu\.abi/);
+  assert.match(testScript, /ro\.kernel\.qemu/);
+  assert.match(testScript, /adb -s \$serial install -t \$apk/);
+  assert.doesNotMatch(testScript, /adb .*uninstall|install -r/i);
+  assert.match(testScript, /SEVEN_GNU_FORK_IPC_OK/);
+  assert.match(testScript, /gnu-node-version-probe\.log/);
+});
+
+test('native GNU startup records failure evidence before claiming Node success', () => {
+  const runtime = readFileSync('mobile/android/app/src/main/java/dev/seven/code/SevenLocalGnuRuntime.kt', 'utf8');
+  const server = readFileSync('mobile/android/app/src/main/java/dev/seven/code/SevenLocalCodeOssServer.kt', 'utf8');
+  assert.match(runtime, /SUPPORTED_ABIS\.firstOrNull\(\)/);
+  assert.match(runtime, /Process\.is64Bit\(\)/);
+  assert.match(server, /gnu-node-version-probe\.log/);
+  assert.match(server, /gnu-platform-probe\.txt/);
+  assert.match(server, /redirectOutput\(log\)/);
+  assert.match(server, /waitFor\(15, TimeUnit\.SECONDS\)/);
+  assert.match(server, /SIGSYS possível/);
+  assert.match(bash, /gnu-node-version-probe\.log/);
+  assert.match(bash, /gnu-platform-probe\.txt/);
 });
 
 test('passing an emulator does not claim Copilot OAuth or final release', () => {

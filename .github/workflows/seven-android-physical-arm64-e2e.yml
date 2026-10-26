@@ -102,7 +102,7 @@ jobs:
           set -euo pipefail
           yes | sdkmanager --licenses >/dev/null || true
           sdkmanager "platforms;android-36" "build-tools;36.0.0" "cmake;3.22.1" "ndk;27.2.12479018"
-          gradle -p mobile/android :app:assembleDebugAndroidTest --no-daemon --stacktrace
+          gradle -p mobile/android :app:assembleDebugAndroidTest -PsevenGnuExperiment=true --no-daemon --stacktrace
           test -s mobile/android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
       - name: Install real single APK and run original GNU startup instrumentation
         shell: bash

@@ -13,12 +13,22 @@ This is an **experimental**, local-first GNU/Linux ARM64 runtime in a separate A
 
 ## Physical Android ARM64 acceptance
 
-Use a **dedicated test phone**. The experimental signed debug APK uses the application ID `dev.seven.code` and `targetSdk=28` solely for research. Do **not** try to update a phone containing the production app with a differently signed debug APK, and do not delete its files.
+Use a **dedicated test phone**. The experimental signed debug APK uses its own application ID `dev.seven.code.gnu` (shown as **Seven Code GNU Test**) and `targetSdk=28` solely for research. It installs beside the real Seven Code without overwriting its files or GitHub sessions. Do not confuse this debug-only variant with a production app.
 
 1. On a private GitHub Actions Linux x86_64 runner, install the Android SDK/ADB and connect exactly one unlocked authorized ARM64 phone over USB. Register the custom runner label `seven-android-device`.
 2. Confirm `adb devices -l`, `adb shell getprop ro.product.cpu.abilist` (must contain `arm64-v8a`) and `adb shell getprop ro.kernel.qemu` (must not return `1`).
 3. After the **experimental GNU single APK** build from current `main` has succeeded, open **Actions → Seven Code Android - physical ARM64 GNU runtime acceptance (experimental) → Run workflow**. Supply its exact successful `experimental_run_id`.
 4. The workflow re-verifies the complete APK/compiled revision, re-signs the app and instrumentation with a temporary CI-only certificate, installs them and requires `SevenStandaloneGnuDeviceTest` to pass. On failure it exposes the sanitized `startup-phase.txt`, GNU Node IPC probe output and Android crash messages.
+
+### Windows + Android físico, sem runner próprio
+
+Baixe **somente** um APK experimental GNU cujo build tenha terminado com sucesso. Na raiz do repositório, com Python 3 e `adb` disponíveis no PATH, execute:
+
+```powershell
+pwsh -File mobile/android/tools/test-gnu-node-arm64-device.ps1 -ApkPath "C:\\Downloads\\SevenCode-gnu-arm64-EXPERIMENTAL-debug.apk"
+```
+
+O teste verifica o APK completo, exige apenas **um** dispositivo físico com ABI principal `arm64-v8a`, instala `dev.seven.code.gnu` sem substituir o aplicativo regular, inicia o Node GNU e só aceita êxito após ler **`node --version` verdadeiro + `child_process.fork()`/IPC real** no sandbox do aparelho. Ele recusa sobrescrever uma instalação prévia do pacote de teste. Se houver falha, apresenta a fase, ABI e logs sanitizados; não libera release nem considera Copilot homologado.
 
 If Node fails before the Code OSS editor appears, check the recorded phase:
 

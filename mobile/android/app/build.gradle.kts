@@ -47,6 +47,17 @@ android {
                 versionNameSuffix = "-isolated"
                 manifestPlaceholders["sevenAppLabel"] = "Seven Code Preview 5"
             }
+            // Debug-only GNU/glibc research must install alongside the real
+            // Seven Code without changing its private files or OAuth session.
+            // Never use this package ID for a published release.
+            if (providers.gradleProperty("sevenGnuExperiment").orNull == "true") {
+                check(providers.gradleProperty("sevenPreviewIsolated").orNull != "true") {
+                    "GNU diagnostic and Web preview packages cannot share one APK"
+                }
+                applicationIdSuffix = ".gnu"
+                versionNameSuffix = "-gnu-test"
+                manifestPlaceholders["sevenAppLabel"] = "Seven Code GNU Test"
+            }
         }
         release {
             isMinifyEnabled = false

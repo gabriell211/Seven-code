@@ -12,12 +12,12 @@ permissions:
   contents: read
 
 jobs:
+  # x86_64/ndk_translation produced SIGSYS SYS_SECCOMP (host syscall 273),
+  # NOT evidence about native Android ARM64 GNU compatibility. Keep this
+  # historical job disabled: only ARM64 guest or PHYSICAL ARM64 acceptance
+  # can ever qualify the original GNU Node process.
   installed-gnu-apk:
-    if: >-
-      github.event_name == 'workflow_run' &&
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.head_branch == 'main' &&
-      github.event.workflow_run.head_repository.full_name == github.repository
+    if: ${{ false }}
     runs-on: ubuntu-24.04
     timeout-minutes: 70
     name: Install actual 300MB APK and open original Code OSS locally (NO release)
@@ -73,7 +73,7 @@ jobs:
           set -euo pipefail
           yes | sdkmanager --licenses > /dev/null || true
           sdkmanager "platforms;android-36" "build-tools;36.0.0" "cmake;3.22.1" "ndk;27.2.12479018"
-          gradle -p mobile/android :app:assembleDebugAndroidTest --no-daemon --stacktrace
+          gradle -p mobile/android :app:assembleDebugAndroidTest -PsevenGnuExperiment=true --no-daemon --stacktrace
           test -s mobile/android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
       - name: Enable hardware virtualization for API35 Android emulator
         run: |
@@ -172,7 +172,7 @@ jobs:
           set -euo pipefail
           yes | sdkmanager --licenses > /dev/null || true
           sdkmanager "platforms;android-36" "build-tools;36.0.0" "cmake;3.22.1" "ndk;27.2.12479018"
-          gradle -p mobile/android :app:assembleDebugAndroidTest --no-daemon --stacktrace
+          gradle -p mobile/android :app:assembleDebugAndroidTest -PsevenGnuExperiment=true --no-daemon --stacktrace
           test -s mobile/android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
       - name: Prove this is a genuine Apple Silicon ARM64 runner
         run: |

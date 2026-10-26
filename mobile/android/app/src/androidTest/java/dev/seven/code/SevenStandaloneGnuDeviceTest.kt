@@ -59,9 +59,10 @@ class SevenStandaloneGnuDeviceTest {
         assertTrue("This acceptance probe needs the bundled original GNU Code OSS runtime",
             SevenLocalGnuRuntime(context,
                 java.io.File(context.filesDir, "seven-code-oss-local")).hasBundle())
-        assertTrue("ARM64 native ABI or verified ARM64 translation is REQUIRED. " +
-            "Do not mark an x86 emulator green without translation.",
-            android.os.Build.SUPPORTED_ABIS.contains("arm64-v8a"))
+        assertTrue("GNU Node requires an actual ARM64 Android process. " +
+            "x86_64 native-bridge translation is NOT native execution.",
+            android.os.Build.SUPPORTED_ABIS.firstOrNull() == "arm64-v8a" &&
+                android.os.Process.is64Bit())
 
         val testStartedAt = System.currentTimeMillis()
         val scene = ActivityScenario.launch(MainActivity::class.java)

@@ -130,16 +130,20 @@ jobs:
           grep -q 'targetSdk = 35' mobile/android/app/build.gradle.kts
           sed -i 's/targetSdk = 35/targetSdk = 28/' mobile/android/app/build.gradle.kts
           grep -q 'targetSdk = 28' mobile/android/app/build.gradle.kts
-          gradle -p mobile/android :app:assembleDebug --no-daemon --stacktrace
+          gradle -p mobile/android :app:assembleDebug -PsevenGnuExperiment=true --no-daemon --stacktrace
           apk=mobile/android/app/build/outputs/apk/debug/app-debug.apk
           test -s "$apk"
+          # This test APK must NEVER replace a genuine installed Seven Code.
+          # Android instrumentation is compiled for the same application ID.
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$apk" |
+            grep -F "package: name='dev.seven.code.gnu'"
           test "$(stat -c %s "$apk")" -gt 30000000
           unzip -Z1 "$apk" | grep -Fx 'assets/seven-local/server.zip'
           unzip -Z1 "$apk" | grep -Fx 'assets/seven-local/gnu-libs.zip'
           unzip -Z1 "$apk" | grep -Fx 'assets/seven-local/gnu-manifest.json'
           unzip -Z1 "$apk" | grep -Fx 'lib/arm64-v8a/libseven-gnu-loader.so'
           unzip -Z1 "$apk" | grep -Fx 'lib/arm64-v8a/libseven-gnu-node.so'
-          node .seven/verify-android-apk.mjs
+          node .seven/verify-android-apk.mjs "$apk" --gnu-experimental
           mkdir -p "$RUNNER_TEMP/experiment"
           cp "$apk" "$RUNNER_TEMP/experiment/SevenCode-gnu-arm64-EXPERIMENTAL-debug.apk"
           echo "ONE experimental APK built. This is not production ready, not E2E accepted and MUST NOT be a GitHub release."
