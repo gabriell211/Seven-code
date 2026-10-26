@@ -70,6 +70,81 @@ async function verifyNodeHost() {
   return proof;
 }
 
+/**
+ * Manual ONLINE acceptance inside the real Android GNU workspace extension host.
+ * No synthetic model output, shared token cache or persistent chat transcripts.
+ * The account owner must complete the regular GitHub authentication first.
+ */
+async function verifyCopilotModelOnAndroid(runtime) {
+  if (!runtime?.nodeForkOk || !runtime.copilotNativeAddonLoaded ||
+      !process.env.SEVEN_ANDROID_NODE_PROOF_DIR ||
+      runtime.arch !== 'arm64' || runtime.platform !== 'linux') {
+    await vscode.window.showWarningMessage(
+      'Copilot não homologado: primeiro execute o host Node.js GNU ARM64 com IPC e módulo nativo no Android.'
+    );
+    return false;
+  }
+  const auth = vscode.authentication;
+  if (typeof auth?.getSession !== 'function') {
+    await vscode.window.showWarningMessage('O provedor de autenticação GitHub não está disponível.');
+    return false;
+  }
+  let session;
+  try {
+    session = await auth.getSession('github', ['read:user', 'user:email'], { createIfNone: false });
+  } catch {
+    await vscode.window.showWarningMessage('Falha ao verificar a sessão GitHub no host Node.js.');
+    return false;
+  }
+  if (!session?.account?.label) {
+    await vscode.window.showWarningMessage(
+      'Faça login na conta GitHub no Seven Code antes do teste online do Copilot.'
+    );
+    return false;
+  }
+  if (typeof vscode.lm?.selectChatModels !== 'function' ||
+      typeof vscode.LanguageModelChatMessage?.User !== 'function') {
+    await vscode.window.showWarningMessage(
+      'Este host não expôs a API de modelos Language Model do Code OSS.'
+    );
+    return false;
+  }
+  const cancel = new vscode.CancellationTokenSource();
+  const deadline = setTimeout(() => cancel.cancel(), 45000);
+  try {
+    const models = await vscode.lm.selectChatModels({ vendor: 'copilot' });
+    const model = models.find(item => item.vendor === 'copilot');
+    if (!model) throw new Error('Nenhum modelo GitHub Copilot disponível');
+    const response = await model.sendRequest([
+      vscode.LanguageModelChatMessage.User(
+        'Teste de conectividade: responda em português com uma frase curta sobre programação.'
+      )
+    ], {}, cancel.token);
+    let answer = '';
+    for await (const part of response.text) {
+      if (cancel.token.isCancellationRequested) throw new Error('A resposta excedeu o prazo');
+      answer += part;
+      if (answer.length > 8192) break;
+    }
+    if (answer.trim().length < 3) throw new Error('Resposta do Copilot vazia');
+    await vscode.window.showInformationMessage(
+      'Copilot respondeu de verdade no host Node ARM64 (' + model.id + '): ' +
+      answer.trim().slice(0, 240)
+    );
+    return true;
+  } catch {
+    await vscode.window.showErrorMessage(
+      'Host Node iniciado e GitHub conectado, mas o modelo Copilot não retornou resposta real. ' +
+      'Verifique licença, rede e logs oficiais do Copilot Chat.'
+    );
+    return false;
+  } finally {
+    clearTimeout(deadline);
+    cancel.cancel();
+    cancel.dispose();
+  }
+}
+
 async function activate(context) {
   let latest;
   try {
@@ -78,6 +153,9 @@ async function activate(context) {
     latest = { kind: 'seven-code-original-node-extension-host-live',
       nodeForkOk: false, copilotNativeAddonLoaded: false };
   }
+  context.subscriptions.push(vscode.commands.registerCommand(
+    'sevenCode.nodeCopilotLiveAcceptance', () => verifyCopilotModelOnAndroid(latest)
+  ));
   context.subscriptions.push(vscode.commands.registerCommand(
     'sevenCode.nodeRuntimeSmoke', async () => {
       const message = latest.nodeForkOk
@@ -89,4 +167,4 @@ async function activate(context) {
   ));
 }
 function deactivate() {}
-module.exports = { activate, deactivate, verifyNodeHost };
+module.exports = { activate, deactivate, verifyNodeHost, verifyCopilotModelOnAndroid };
