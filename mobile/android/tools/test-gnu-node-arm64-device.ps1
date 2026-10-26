@@ -58,7 +58,8 @@ while ((Get-Date) -lt $deadline) {
     $version = Read-Probe 'gnu-node-version-probe.log'
     $ipc = Read-Probe 'gnu-node-fork-probe.log'
     if ($version -match '^v[0-9]+\.' -and $ipc -match 'SEVEN_GNU_FORK_IPC_OK') {
-        Write-Host "APROVADO NO DISPOSITIVO: GNU Node $($version -split '\s+')[0] e IPC real child_process.fork."
+        $nodeVersion = ($version -split '\s+')[0]
+        Write-Host "APROVADO NO DISPOSITIVO: GNU Node $nodeVersion e IPC real child_process.fork."
         Write-Host "ABI e proveniência: $(Read-Probe 'gnu-platform-probe.txt')"
         Write-Host 'Isso NÃO homologa o Copilot Agent nem o workbench completo.'
         exit 0
