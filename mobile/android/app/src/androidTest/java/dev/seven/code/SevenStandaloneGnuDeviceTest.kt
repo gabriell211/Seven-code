@@ -138,6 +138,17 @@ class SevenStandaloneGnuDeviceTest {
             }
             assertEquals("Original Monaco Code OSS editor DOM did not load",
                 "true", domResult.get())
+            // Proof is produced by the actual GNU ARM64 Node.js process,
+            // after spawning a separate Node child and receiving genuine IPC.
+            // A desktop Linux unit test or a stored marker cannot pass here.
+            val forkEvidence = java.io.File(context.filesDir,
+                "seven-code-oss-local/gnu-node-fork-probe.log")
+            assertTrue("GNU Node did not pass the on-device child_process.fork IPC preflight",
+                forkEvidence.isFile && forkEvidence.lastModified() >= testStartedAt &&
+                forkEvidence.readText().lineSequence().any {
+                    it.trim() == "SEVEN_GNU_FORK_IPC_OK"
+                })
+
             // A real Node.js workspace extension must activate inside the
             // LOCAL Android Code OSS server, fork a genuine Node child and
             // prove IPC. A browser-only Web Worker cannot write this evidence.
