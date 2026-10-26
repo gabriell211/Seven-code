@@ -613,6 +613,66 @@ async function openCopilotChat() {
     }
 }
 
+async function configureAndroidAiFeatures() {
+    if (typeof vscode.authentication?.getSession !== 'function') {
+        await vscode.window.showErrorMessage(
+            'O provedor GitHub não foi registrado no host Web do Seven Code. ' +
+            'Os recursos de IA ainda não podem ser ativados.'
+        );
+        return;
+    }
+    let session;
+    try {
+        session = await vscode.authentication.getSession(
+            'github', ['read:user', 'user:email'], { createIfNone: true }
+        );
+    } catch {
+        await vscode.window.showErrorMessage(
+            'A autorização no navegador não concluiu uma sessão no Seven Code. ' +
+            'Retorne ao aplicativo, aguarde a confirmação e tente novamente.'
+        );
+        return;
+    }
+    if (!session?.account?.label) {
+        await vscode.window.showWarningMessage(
+            'O GitHub ainda não confirmou uma sessão no Seven Code. ' +
+            'O código aprovado no navegador não ativa sozinho o Copilot.'
+        );
+        return;
+    }
+    const extension = vscode.extensions?.getExtension?.('GitHub.copilot-chat');
+    if (!extension) {
+        await vscode.window.showWarningMessage(
+            'GitHub conectado: ' + session.account.label + '. Porém o host ' +
+            'de extensões não carregou o Copilot Chat oficial. Este APK Web ' +
+            'não fornece o runtime Node completo do desktop.'
+        );
+        return;
+    }
+    let models = [];
+    try {
+        if (typeof vscode.lm?.selectChatModels === 'function') {
+            models = await vscode.lm.selectChatModels({ vendor: 'copilot' });
+        }
+    } catch {
+        models = [];
+    }
+    if (!models.some(model => model.vendor === 'copilot')) {
+        await vscode.window.showWarningMessage(
+            'GitHub conectado como ' + session.account.label +
+            ', mas nenhum modelo Copilot está disponível neste host. ' +
+            'O botão não ativa sugestões sem um provedor oficial carregado. ' +
+            'Verifique assinatura e runtime da extensão.'
+        );
+        return;
+    }
+    await vscode.commands.executeCommand('workbench.action.chat.open');
+    await vscode.window.showInformationMessage(
+        'GitHub conectado e modelo Copilot detectado. Confirme uma resposta ' +
+        'real no Chat antes de considerar a IA homologada.'
+    );
+}
+
 async function showCopilotStatus() {
     const extension = vscode.extensions?.getExtension?.('GitHub.copilot-chat');
     const workspace = (vscode.workspace?.workspaceFolders || [])
@@ -809,6 +869,9 @@ async function activate(context) {
         ));
         context.subscriptions.push(vscode.commands.registerCommand(
             'sevenCode.copilotStatus', showCopilotStatus
+        ));
+        context.subscriptions.push(vscode.commands.registerCommand(
+            'sevenCode.configureAndroidAiFeatures', configureAndroidAiFeatures
         ));
     }
     if (typeof vscode.lm?.registerTool === 'function' &&
