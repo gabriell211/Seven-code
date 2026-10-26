@@ -1,6 +1,8 @@
 package dev.seven.code
 
 import android.os.SystemClock
+import android.content.pm.ActivityInfo
+import android.content.res.Configuration
 import android.graphics.Bitmap
 import java.io.File
 import android.webkit.WebView
@@ -124,6 +126,97 @@ class SevenOfflineWebWorkbenchDeviceTest {
 
         }
     }
+    @Test
+    fun rotatingAndroidDoesNotRestartCodeOssOrDestroyUnsavedEditorState() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val bundled = try {
+            context.assets.open("seven-web/bundle.json").use { true }
+        } catch (_: java.io.IOException) { false }
+        assumeTrue("Rotation E2E requires the original bundled Code OSS", bundled)
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            val beforeActivity = AtomicReference<MainActivity>()
+            val beforeWebView = AtomicReference<WebView>()
+            var markerStored = false
+            for (attempt in 0 until 80) {
+                val done = CountDownLatch(1)
+                val result = AtomicReference<String>("false")
+                scenario.onActivity { activity ->
+                    val web = activity.findViewById<android.view.ViewGroup>(android.R.id.content)
+                        .getChildAt(0) as? WebView
+                    if (web == null) {
+                        done.countDown()
+                        return@onActivity
+                    }
+                    web.evaluateJavascript(
+                        """(function() {
+                            if (!document.querySelector('.monaco-workbench')) return false;
+                            document.documentElement.dataset.sevenRotationProof = 'unsaved-editor-state-kept';
+                            return true;
+                        })()"""
+                    ) {
+                        if (it == "true") {
+                            beforeActivity.set(activity)
+                            beforeWebView.set(web)
+                        }
+                        result.set(it)
+                        done.countDown()
+                    }
+                }
+                if (done.await(4, TimeUnit.SECONDS) && result.get() == "true") {
+                    markerStored = true
+                    break
+                }
+                SystemClock.sleep(500)
+            }
+            assertTrue("Code OSS did not boot before screen rotation", markerStored)
+
+            for (orientation in listOf(
+                ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE,
+                ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            )) {
+                scenario.onActivity { activity ->
+                    activity.requestedOrientation = orientation
+                }
+                val expected = if (orientation == ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE)
+                    Configuration.ORIENTATION_LANDSCAPE else Configuration.ORIENTATION_PORTRAIT
+                var preserved = false
+                var diagnostic = "No configuration result"
+                for (attempt in 0 until 50) {
+                    val done = CountDownLatch(1)
+                    val same = AtomicReference(false)
+                    scenario.onActivity { activity ->
+                        val web = activity.findViewById<android.view.ViewGroup>(android.R.id.content)
+                            .getChildAt(0) as? WebView
+                        val orientationNow = activity.resources.configuration.orientation
+                        if (activity !== beforeActivity.get() || web !== beforeWebView.get()) {
+                            diagnostic = "Activity or Chromium WebView recreated"
+                            done.countDown()
+                            return@onActivity
+                        }
+                        if (orientationNow != expected) {
+                            diagnostic = "Awaiting orientation " + expected + ", observed " + orientationNow
+                            done.countDown()
+                            return@onActivity
+                        }
+                        web.evaluateJavascript(
+                            "document.documentElement.dataset.sevenRotationProof === 'unsaved-editor-state-kept' && !!document.querySelector('.monaco-workbench')"
+                        ) {
+                            same.set(it == "true")
+                            diagnostic = "DOM marker preserved: " + it
+                            done.countDown()
+                        }
+                    }
+                    if (done.await(4, TimeUnit.SECONDS) && same.get()) {
+                        preserved = true
+                        break
+                    }
+                    SystemClock.sleep(350)
+                }
+                assertTrue("Code OSS restarted or lost live state when rotated: $diagnostic", preserved)
+            }
+        }
+    }
+
     @Test
     fun androidSystemKeyboardOpensForRealFocusedWebViewTextarea() {
         // This is an on-emulator test of Chromium -> trusted WebMessageListener
