@@ -188,7 +188,7 @@ class SevenOfflineWebWorkbenchDeviceTest {
                         val web = activity.findViewById<android.view.ViewGroup>(android.R.id.content)
                             .getChildAt(0) as? WebView
                         val orientationNow = activity.resources.configuration.orientation
-                        if (activity !== beforeActivity.get() || web !== beforeWebView.get()) {
+                        if (web == null || activity !== beforeActivity.get() || web !== beforeWebView.get()) {
                             diagnostic = "Activity or Chromium WebView recreated"
                             done.countDown()
                             return@onActivity
