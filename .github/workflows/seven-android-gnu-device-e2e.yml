@@ -41,7 +41,8 @@ jobs:
           if ! git diff --quiet "$source_sha" HEAD -- \
             mobile/android/app/src/main mobile/android/terminal \
             mobile/android/app/build.gradle.kts mobile/android/settings.gradle.kts \
-            .seven/package-android-gnu-experiment.mjs; then
+            .seven/package-android-gnu-experiment.mjs \
+            .seven/android/gnu-node-fork-probe.cjs; then
             echo "::error::The downloaded APK predates actual app runtime changes; never test a stale app."
             exit 1
           fi
@@ -139,7 +140,8 @@ jobs:
           if ! git diff --quiet "$source_sha" HEAD -- \
             mobile/android/app/src/main mobile/android/terminal \
             mobile/android/app/build.gradle.kts mobile/android/settings.gradle.kts \
-            .seven/package-android-gnu-experiment.mjs; then
+            .seven/package-android-gnu-experiment.mjs \
+            .seven/android/gnu-node-fork-probe.cjs; then
             echo "::error::The downloaded APK predates actual app runtime changes; never test a stale app."
             exit 1
           fi
