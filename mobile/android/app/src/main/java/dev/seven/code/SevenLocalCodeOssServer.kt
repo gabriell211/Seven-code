@@ -80,10 +80,13 @@ internal class SevenLocalCodeOssServer(private val context: Context) {
      * This is NOT an E2E success claim.
      */
     fun safeRuntimeDiagnostic(): String {
+        val bootAttempt = File(root, "boot-attempt.txt")
+        val attemptTime = if (bootAttempt.isFile) bootAttempt.lastModified() else Long.MAX_VALUE
         fun boundedLog(name: String): String =
             runCatching {
                 val file = File(root, name)
-                if (!file.isFile || file.length() > 32_768L) "" else file.readText().take(2_048)
+                if (!file.isFile || file.lastModified() < attemptTime ||
+                    file.length() > 32_768L) "" else file.readText().take(2_048)
             }.getOrDefault("")
 
         val phase = boundedLog("startup-phase.txt")
@@ -103,10 +106,10 @@ internal class SevenLocalCodeOssServer(private val context: Context) {
             .lineSequence().any { it.trim() == "SEVEN_GNU_FORK_IPC_OK" }
         val nativeAddonProof = runCatching {
             val evidence = File(context.filesDir, "seven-code-node-runtime-proof.json")
-            val currentBoot = File(root, "startup-phase.txt")
-            // A previous successful run must never be shown as current.
-            check(evidence.isFile && currentBoot.isFile &&
-                evidence.lastModified() >= currentBoot.lastModified())
+            // Current boot identity, rather than the most recent UI phase:
+            // a prior successful addon must not qualify a later failed boot.
+            check(evidence.isFile && bootAttempt.isFile &&
+                evidence.lastModified() >= attemptTime)
             val json = JSONObject(evidence.readText().take(4096))
             json.optBoolean("nodeForkOk", false) &&
                 json.optBoolean("copilotNativeAddonLoaded", false)
@@ -234,6 +237,9 @@ internal class SevenLocalCodeOssServer(private val context: Context) {
 
     private fun startVerifiedLocalServer(): String {
         bootPhase("verify-bundle")
+        // Every attempt invalidates old GNU version/IPC/addon evidence even
+        // when extraction or ELF preparation fails before the Node probe.
+        File(root, "boot-attempt.txt").writeText(System.currentTimeMillis().toString())
         check(hasBundle()) { "Pacote Code OSS não está incluído neste APK." }
         check(android.os.Build.SUPPORTED_ABIS.contains("arm64-v8a")) {
             "O runtime local requer Android ARM64; este dispositivo usa outra arquitetura."
