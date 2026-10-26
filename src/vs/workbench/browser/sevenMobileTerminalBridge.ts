@@ -72,6 +72,14 @@ if (host && typeof BroadcastChannel !== 'undefined') {
         MenuRegistry.appendMenuItem(MenuId.SCMTitle, {
             command: { id: 'sevenCode.androidGitStatus', title: 'Git Android: diagnóstico' },
             group: '1_seven_mobile@1'
+        }),
+        MenuRegistry.appendMenuItem(MenuId.TerminalNewDropdownContext, {
+            command: { id: 'sevenCode.openAndroidTerminal', title: 'Novo terminal do celular' },
+            group: '1_seven_mobile@1'
+        }),
+        MenuRegistry.appendMenuItem(MenuId.EditorTitle, {
+            command: { id: 'sevenCode.openAndroidTerminal', title: 'Abrir terminal do celular' },
+            group: 'navigation@54'
         })
     ];
     // Monaco, xterm.js, the command palette and dialogs use real Chromium
