@@ -102,7 +102,7 @@ trap diagnose_android_codeoss_failure EXIT
 # Test the editor delivered by the *single original 300+ MB APK*, not a fake
 # remote browser or a standalone .html test fixture. Keep the result in CI.
 adb shell am instrument -w -r \
-  -e class dev.seven.code.gnu.SevenStandaloneGnuDeviceTest \
+  -e class dev.seven.code.SevenStandaloneGnuDeviceTest \
   dev.seven.code.gnu.test/androidx.test.runner.AndroidJUnitRunner \
   | tee "$RUNNER_TEMP/gnu-android-instrumentation.txt"
 grep -Fq 'OK (1 test)' "$RUNNER_TEMP/gnu-android-instrumentation.txt"
