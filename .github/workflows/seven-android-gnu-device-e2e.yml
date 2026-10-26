@@ -12,12 +12,12 @@ permissions:
   contents: read
 
 jobs:
+  # x86_64/ndk_translation produced SIGSYS SYS_SECCOMP (host syscall 273),
+  # NOT evidence about native Android ARM64 GNU compatibility. Keep this
+  # historical job disabled: only ARM64 guest or PHYSICAL ARM64 acceptance
+  # can ever qualify the original GNU Node process.
   installed-gnu-apk:
-    if: >-
-      github.event_name == 'workflow_run' &&
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.head_branch == 'main' &&
-      github.event.workflow_run.head_repository.full_name == github.repository
+    if: ${{ false }}
     runs-on: ubuntu-24.04
     timeout-minutes: 70
     name: Install actual 300MB APK and open original Code OSS locally (NO release)
