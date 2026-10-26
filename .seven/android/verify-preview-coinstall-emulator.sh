@@ -42,10 +42,12 @@ adb shell pm path dev.seven.code | grep '^package:'
 adb install -r "$preview3_apk"
 adb shell pm path dev.seven.code.preview | grep '^package:'
 
-# Test 3: New Preview 4 must coexist with BOTH publicly installed packages.
+# Test 3: New Preview 5 must coexist with BOTH publicly installed packages.
+# The distinct package ID also preserves Preview 4 on the user's phone,
+# whose runner-generated debug certificate cannot be used for upgrades.
 
 adb install -r "$new_apk"
-adb shell pm path dev.seven.code.preview4 | grep '^package:'
+adb shell pm path dev.seven.code.preview5 | grep '^package:'
 adb shell pm path dev.seven.code.preview | grep '^package:'
 adb shell pm path dev.seven.code | grep '^package:'
 
@@ -66,11 +68,11 @@ adb shell pm path dev.seven.code | grep '^package:' || {
 # Restore only the isolated preview APK with the same verified bytes, then
 # prove both package IDs coexist and launch the isolated application.
 adb install -r "$new_apk"
-adb shell pm path dev.seven.code.preview4 | grep '^package:'
+adb shell pm path dev.seven.code.preview5 | grep '^package:'
 adb shell pm path dev.seven.code.preview | grep '^package:'
 adb shell pm path dev.seven.code | grep '^package:'
-adb shell am start -W -n dev.seven.code.preview4/dev.seven.code.MainActivity
-adb shell pm path dev.seven.code.preview4 | grep '^package:'
+adb shell am start -W -n dev.seven.code.preview5/dev.seven.code.MainActivity
+adb shell pm path dev.seven.code.preview5 | grep '^package:'
 adb shell pm path dev.seven.code.preview | grep '^package:'
 adb shell pm path dev.seven.code | grep '^package:'
 echo "SEVEN_PREVIEW_SIDE_BY_SIDE_INSTALL_E2E_OK"
