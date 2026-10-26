@@ -353,6 +353,12 @@ test('mobile routes ordinary and extension-created terminals through trusted nat
     assert.match(terminalProcessSource, /implements ITerminalChildProcess/);
     assert.match(terminalProcessSource, /onProcessReady/);
     assert.match(terminalProcessSource, /onProcessExit/);
+    assert.match(terminalProcessSource, /private finishStart/);
+    assert.match(terminalProcessSource, /this\.finishStart\(undefined\)/);
+    assert.match(terminalProcessSource, /for \(const delay of \[1200, 3500, 8000\]\)/);
+    assert.match(terminalProcessSource, /this\.send\('start', dimensions\)/);
+    assert.match(terminalProcessSource, /this\.startTimers\.push\(setTimeout/);
+    assert.match(terminalProcessSource, /Sem resposta do terminal Android/);
     assert.match(terminalProcessSource, /MAX_PENDING_INPUT = 131072/);
     assert.match(native, /"pid", pty\.shellPid\(\)/);
     assert.match(native, /"cwd", filesDir\.canonicalPath/);
