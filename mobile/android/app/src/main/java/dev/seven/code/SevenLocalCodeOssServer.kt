@@ -98,9 +98,20 @@ internal class SevenLocalCodeOssServer(private val context: Context) {
      */
     private fun probeGnuNode(launch: SevenLocalGnuRuntime.Launch) {
         bootPhase("probe-original-gnu-node-on-android")
+        // Persist non-identifying ABI information for fail-closed physical
+        // Android acceptance. An x86_64 bridge must never count as native.
+        val primaryAbi = android.os.Build.SUPPORTED_ABIS.firstOrNull() ?: "unknown"
+        File(root, "gnu-platform-probe.txt").writeText(
+            "primaryAbi=$primaryAbi;is64Bit=${android.os.Process.is64Bit()};" +
+                "sdk=${android.os.Build.VERSION.SDK_INT};loader=isolated-gnu"
+        )
+        val log = File(root, "gnu-node-version-probe.log")
+        // stdout redirected to a file BEFORE waitFor(): a native linker or
+        // Node crash can produce enough output to fill the OS pipe and hang.
         val probe = ProcessBuilder(launch.prefix + "--version")
             .directory(root)
             .redirectErrorStream(true)
+            .redirectOutput(log)
         probe.environment().apply {
             put("LD_LIBRARY_PATH", launch.libraryPath)
             put("HOME", context.filesDir.absolutePath)
@@ -115,11 +126,17 @@ internal class SevenLocalCodeOssServer(private val context: Context) {
             child.waitFor(3, TimeUnit.SECONDS)
             error("Original GNU Node --version excedeu 15 segundos no Android.")
         }
-        val output = child.inputStream.bufferedReader().use { it.readText().take(800) }
+        val output = runCatching { log.readText().take(800) }.getOrDefault("")
             .replace(Regex("[a-fA-F0-9]{64}"), "[redacted-local-token]")
-            .replace(Regex("[\\r\\n]+"), " ").take(220)
-        check(child.exitValue() == 0 && output.contains(Regex("v[0-9]+\\.[0-9]+"))) {
-            "Node GNU ARM64 não executou no Android: exit=${child.exitValue()}; output=$output"
+            .replace(Regex("[\\r\\n\\t]+"), " ").take(220)
+        val exitCode = child.exitValue()
+        check(exitCode == 0 && output.contains(Regex("v[0-9]+\\.[0-9]+"))) {
+            val hint = if (exitCode == 159 || exitCode == 128 + 31) {
+                "SIGSYS possível: consulte o buffer de crash Android para confirmar seccomp/syscall."
+            } else if (exitCode == 137) {
+                "Processo encerrado por SIGKILL; consulte o buffer de crash Android."
+            } else "Verifique o linker GNU e as dependências ARM64."
+            "Node GNU ARM64 não executou no Android: exit=$exitCode; $hint; output=$output"
         }
         bootPhase("original-gnu-node-runs-on-android")
         probeGnuNodeForkIpc(launch)
