@@ -157,6 +157,26 @@ async function activate(context) {
     'sevenCode.nodeCopilotLiveAcceptance', () => verifyCopilotModelOnAndroid(latest)
   ));
   context.subscriptions.push(vscode.commands.registerCommand(
+    'sevenCode.nodeCopilotAgentAcceptance', async () => {
+      // The chat mode and permission decisions are controlled by the actual
+      // user. A successful chat model request is a prerequisite, not proof
+      // that the multi-step Agent itself works.
+      if (!await verifyCopilotModelOnAndroid(latest)) return;
+      try {
+        await vscode.commands.executeCommand('workbench.action.chat.open');
+        await vscode.window.showInformationMessage(
+          'Prova do Agent: escolha Agent no Copilot Chat e peça para executar ' +
+          '"printf SEVEN_CODE_AGENT_REAL_OK". Autorize a janela nativa Android ' +
+          'e confira a saída real. Ainda exige validação manual.'
+        );
+      } catch {
+        await vscode.window.showErrorMessage(
+          'O Copilot respondeu, mas o painel Chat original não abriu no host Android.'
+        );
+      }
+    }
+  ));
+  context.subscriptions.push(vscode.commands.registerCommand(
     'sevenCode.nodeRuntimeSmoke', async () => {
       const message = latest.nodeForkOk
         ? 'Node.js workspace extension host + fork IPC reais: OK. Copilot native addon: ' +
