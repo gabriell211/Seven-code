@@ -7,6 +7,8 @@ on:
     paths:
       - ".github/workflows/seven-android-offline-web.yml"
       - ".seven/package-android-web.mjs"
+      - ".seven/tests/android-preview-install.test.mjs"
+      - ".seven/android/verify-preview-coinstall-emulator.sh"
       - ".seven/android/localize-codeoss-web.mjs"
       - ".seven/tests/android-localization.test.mjs"
       - ".seven/tests/android-system-ime.test.mjs"
@@ -20,6 +22,7 @@ on:
       - ".seven/verify-android-web.mjs"
       - ".seven/tests/android-web-bundle.test.mjs"
       - "mobile/android/app/src/main/**"
+      - "mobile/android/app/build.gradle.kts"
       - "mobile/android/app/src/androidTest/java/dev/seven/code/SevenOfflineWebWorkbenchDeviceTest.kt"
       - "build/gulpfile.vscode.web.ts"
       - "src/vs/code/browser/workbench/**"
@@ -33,12 +36,15 @@ on:
       - "src/vs/workbench/browser/sevenMobileTerminalBridge.ts"
       - ".github/workflows/seven-android-offline-web.yml"
       - ".seven/package-android-web.mjs"
+      - ".seven/tests/android-preview-install.test.mjs"
+      - ".seven/android/verify-preview-coinstall-emulator.sh"
       - ".seven/android/localize-codeoss-web.mjs"
       - ".seven/tests/android-localization.test.mjs"
       - ".seven/tests/android-system-ime.test.mjs"
       - ".seven/verify-android-web.mjs"
       - ".seven/tests/android-web-bundle.test.mjs"
       - "mobile/android/app/src/main/**"
+      - "mobile/android/app/build.gradle.kts"
       - "mobile/android/app/src/androidTest/java/dev/seven/code/SevenOfflineWebWorkbenchDeviceTest.kt"
       - "build/gulpfile.vscode.web.ts"
       - "src/vs/code/browser/workbench/**"
@@ -119,21 +125,29 @@ jobs:
           mkdir -p mobile/android/app/src/main/assets/seven-web/licenses
           cp "$RUNNER_TEMP/seven-code-pt-br-LICENSE.md" \
             mobile/android/app/src/main/assets/seven-web/licenses/vscode-loc-LICENSE.md
-          node --test .seven/tests/android-web-bundle.test.mjs .seven/tests/android-localization.test.mjs .seven/tests/android-system-ime.test.mjs .seven/tests/android-copilot-chat-command.test.mjs .seven/tests/android-copilot-shell-tool.test.mjs .seven/tests/android-github-device-auth.test.mjs
+          node --test .seven/tests/android-preview-install.test.mjs .seven/tests/android-web-bundle.test.mjs .seven/tests/android-localization.test.mjs .seven/tests/android-system-ime.test.mjs .seven/tests/android-copilot-chat-command.test.mjs .seven/tests/android-copilot-shell-tool.test.mjs .seven/tests/android-github-device-auth.test.mjs
           test -s mobile/android/app/src/main/assets/seven-web/out/vs/workbench/workbench.web.main.internal.js
           test -s mobile/android/app/src/main/assets/seven-web/extensions/copilot-chat/dist/web.js
       - name: Build APK with Android native PTY and embedded Code OSS Web UI
-        run: gradle -p mobile/android :app:assembleDebug --no-daemon --stacktrace
+        run: gradle -p mobile/android :app:assembleDebug -PsevenPreviewIsolated=true --no-daemon --stacktrace
       - name: Reject WebView-only shell or broken/unrendered editor assets
         run: |
-          node .seven/verify-android-web.mjs
-          sha256sum mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          set -euo pipefail
+          apk="mobile/android/app/build/outputs/apk/debug/app-debug.apk"
+          node .seven/verify-android-web.mjs "$apk"
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$apk"
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$apk" | tee "$RUNNER_TEMP/seven-preview-badging.txt"
+          grep -F "package: name='dev.seven.code.preview'" "$RUNNER_TEMP/seven-preview-badging.txt"
+          grep -F "versionCode='3'" "$RUNNER_TEMP/seven-preview-badging.txt"
+          sha256sum "$apk"
       - name: Require real hardware acceleration for emulator E2E
         run: |
           test -e /dev/kvm || { echo "::error::Hosted runner has no KVM"; exit 1; }
           sudo chmod 666 /dev/kvm
-      - name: Boot real Android WebView and verify original editor actually renders
+      - name: Boot real Android WebView, upgrade-safe side-by-side installation and functional editor E2E
         uses: reactivecircus/android-emulator-runner@v2
+        env:
+          GH_TOKEN: ${{ github.token }}
         with:
           api-level: 35
           arch: x86_64
@@ -141,10 +155,7 @@ jobs:
           profile: pixel_5
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
           script: |
-            # reactivecircus executes each script line in a separate shell.
-            # Gradle instrumentation itself checks compositor pixel diversity,
-            # screenshots and original Code OSS UI; preserve its real exit code.
-            gradle -p mobile/android :app:connectedDebugAndroidTest --no-daemon --stacktrace -Pandroid.testInstrumentationRunnerArguments.class=dev.seven.code.SevenOfflineWebWorkbenchDeviceTest
+            bash .seven/android/verify-preview-coinstall-emulator.sh
       - name: Attach APK ONLY after actual on-emulator Web Workbench test passes
         run: |
           mkdir -p "$RUNNER_TEMP/offline-web-apk"

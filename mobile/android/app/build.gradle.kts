@@ -13,7 +13,14 @@ android {
         targetSdk = 35
         versionCode = 2
         versionName = "0.2.0-preview.1"
+        if (providers.gradleProperty("sevenPreviewIsolated").orNull == "true") {
+            versionCode = 3
+            versionName = "0.2.0-preview.3"
+        }
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // The app label is materialized by Gradle so isolated preview builds
+        // are visibly distinguishable from an installed Seven Code release.
+        manifestPlaceholders["sevenAppLabel"] = "Seven Code"
     }
 
     // Android's nativeLibraryDir must contain an executable Bionic
@@ -29,6 +36,18 @@ android {
     }
 
     buildTypes {
+        debug {
+            // GitHub runners generate a different DEBUG signing key each time.
+            // Do not pretend that an APK signed on a new runner can safely
+            // replace a prior preview with the same application ID. These
+            // disposable Android Web previews install next to the user's
+            // existing Seven Code without touching its documents or settings.
+            if (providers.gradleProperty("sevenPreviewIsolated").orNull == "true") {
+                applicationIdSuffix = ".preview"
+                versionNameSuffix = "-isolated"
+                manifestPlaceholders["sevenAppLabel"] = "Seven Code Preview"
+            }
+        }
         release {
             isMinifyEnabled = false
         }
