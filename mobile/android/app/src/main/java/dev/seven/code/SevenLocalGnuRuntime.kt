@@ -24,7 +24,8 @@ internal class SevenLocalGnuRuntime(
         val prefix: List<String>,
         val libraryPath: String,
         val cliWrapper: File,
-        val bootstrap: File
+        val bootstrap: File,
+        val forkProbe: File
     )
 
     private val nativeDir = File(context.applicationInfo.nativeLibraryDir)
@@ -223,6 +224,20 @@ internal class SevenLocalGnuRuntime(
         // hard-coded /lib/ld-linux-aarch64.so.1 interpreter does not exist in
         // Android. A second, local wrapper ensures *every* Node child process
         // uses our verified, APK-bundled GNU dynamic loader.
+        val forkProbe = File(root, "gnu-node-fork-probe.cjs")
+        val expectedForkProbe = manifest.getString("nodeForkProbeSha256")
+        check(expectedForkProbe.matches(Regex("[a-f0-9]{64}"))) {
+            "Manifesto sem SHA-256 válido do teste GNU Node IPC."
+        }
+        val script = context.assets.open("seven-local/gnu-node-fork-probe.cjs").use { stream ->
+            val raw = stream.readBytes()
+            check(raw.size in 100..16_384) { "Tamanho inválido do teste Node IPC." }
+            raw
+        }
+        forkProbe.writeBytes(script)
+        check(hash(forkProbe).equals(expectedForkProbe, true)) {
+            "Teste GNU Node IPC não corresponde ao SHA-256 assinado."
+        }
         val nodeWrapper = File(root, "seven-node-gnu.sh")
         nodeWrapper.writeText(
             "#!/system/bin/sh\n" +
@@ -243,7 +258,8 @@ internal class SevenLocalGnuRuntime(
             prefix = listOf(nodeWrapper.absolutePath),
             libraryPath = destination.absolutePath,
             cliWrapper = wrapper,
-            bootstrap = bootstrap
+            bootstrap = bootstrap,
+            forkProbe = forkProbe
         )
     }
 }
