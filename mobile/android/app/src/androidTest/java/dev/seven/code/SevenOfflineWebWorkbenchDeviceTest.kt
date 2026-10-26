@@ -288,17 +288,43 @@ class SevenOfflineWebWorkbenchDeviceTest {
             // Simulate an actual finger tap on the visible textarea instead.
             // This proves the same path the user's Android keyboard uses.
             val tap = AtomicReference<Pair<Int, Int>?>(null)
+            val positionLatch = CountDownLatch(1)
             scenario.onActivity { activity ->
                 val web = activity.findViewById<android.view.ViewGroup>(
                     android.R.id.content).getChildAt(0) as? WebView
-                if (web != null) {
-                    val position = IntArray(2)
-                    web.getLocationOnScreen(position)
-                    tap.set(Pair(position[0] + web.width / 2, position[1] + web.height / 2))
+                if (web == null) {
+                    positionLatch.countDown()
+                    return@onActivity
+                }
+                // A Workbench panel or system inset may shift the actual
+                // textarea away from the WebView center. Tap the REAL HTML
+                // element by its current DOM bounding box instead.
+                web.evaluateJavascript(
+                    """(function() {
+                        const input = document.getElementById('seven-ime-e2e');
+                        if (!input) return '';
+                        const r = input.getBoundingClientRect();
+                        if (!r.width || !r.height) return '';
+                        return [(r.left + r.width / 2) / window.innerWidth,
+                            (r.top + r.height / 2) / window.innerHeight].join(',');
+                    })()"""
+                ) { value ->
+                    val fractions = value.removeSurrounding("\"").split(",")
+                        .mapNotNull { it.toDoubleOrNull() }
+                    if (fractions.size == 2 && fractions.all { it in 0.0..1.0 }) {
+                        val position = IntArray(2)
+                        web.getLocationOnScreen(position)
+                        tap.set(Pair(
+                            position[0] + (web.width * fractions[0]).toInt(),
+                            position[1] + (web.height * fractions[1]).toInt()))
+                    }
+                    positionLatch.countDown()
                 }
             }
+            assertTrue("WebView DOM textarea coordinate lookup timed out",
+                positionLatch.await(5, TimeUnit.SECONDS))
             val target = tap.get() ?: throw AssertionError(
-                "No WebView center available for real user IME tap")
+                "No actual DOM textarea coordinates available for real user IME tap")
             assertTrue("Android could not tap the real editor field",
                 UiDevice.getInstance(instrumentation).click(target.first, target.second))
             var keyboardVisible = false
