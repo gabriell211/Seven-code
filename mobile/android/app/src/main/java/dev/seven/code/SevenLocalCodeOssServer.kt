@@ -103,6 +103,10 @@ internal class SevenLocalCodeOssServer(private val context: Context) {
             .lineSequence().any { it.trim() == "SEVEN_GNU_FORK_IPC_OK" }
         val nativeAddonProof = runCatching {
             val evidence = File(context.filesDir, "seven-code-node-runtime-proof.json")
+            val currentBoot = File(root, "startup-phase.txt")
+            // A previous successful run must never be shown as current.
+            check(evidence.isFile && currentBoot.isFile &&
+                evidence.lastModified() >= currentBoot.lastModified())
             val json = JSONObject(evidence.readText().take(4096))
             json.optBoolean("nodeForkOk", false) &&
                 json.optBoolean("copilotNativeAddonLoaded", false)
