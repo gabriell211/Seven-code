@@ -1,0 +1,14 @@
+/* Android WebView touch UI: retain full keyboard shortcuts for USB/Bluetooth
+   keyboards, but do not advertise PC Ctrl/Cmd labels as touch actions. */
+@media (pointer: coarse) and (hover: none) {
+  html.seven-mobile-android .monaco-menu .monaco-keybinding,
+  html.seven-mobile-android .context-view .monaco-keybinding,
+  html.seven-mobile-android .monaco-menu .keybinding,
+  html.seven-mobile-android .monaco-menu .keybinding-label,
+  html.seven-mobile-android .keybinding-label {
+    display: none !important;
+  }
+  html.seven-mobile-android .monaco-menu .action-label {
+    white-space: normal;
+  }
+}
