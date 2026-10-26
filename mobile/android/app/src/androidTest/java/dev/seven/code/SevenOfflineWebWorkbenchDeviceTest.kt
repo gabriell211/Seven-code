@@ -443,7 +443,7 @@ class SevenOfflineWebWorkbenchDeviceTest {
             assertTrue("Original Code OSS did not expose Android native PTY bridge",
                 startRequested)
             val device = UiDevice.getInstance(instrumentation)
-            val confirm = device.wait(Until.findObject(By.text("Abrir terminal")), 15_000)
+            val confirm = device.wait(Until.findObject(By.text(java.util.regex.Pattern.compile("(?i)abrir terminal"))), 15_000)
             assertTrue("Native Android shell consent dialog did not appear", confirm != null)
             confirm!!.click()
 
