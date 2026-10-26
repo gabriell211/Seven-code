@@ -129,6 +129,9 @@ internal class SevenLocalCodeOssServer(private val context: Context) {
         }
     }
 
+    /** Only the isolated GNU/glibc experiment should show GNU diagnostics. */
+    fun hasGnuResearchRuntime(): Boolean = SevenLocalGnuRuntime(context, root).hasBundle()
+
     /** Presence is not proof of a runnable server. Integrity/startup checks follow. */
     fun hasBundle(): Boolean = try {
         context.assets.open(ARCHIVE).use { }
