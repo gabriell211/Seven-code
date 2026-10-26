@@ -26,7 +26,7 @@ test('real Copilot response is available as manual Node-only acceptance, never s
   assert.match(source, /verifyCopilotModelOnAndroid/);
   assert.match(source, /SEVEN_ANDROID_NODE_PROOF_DIR/);
   assert.match(source, /copilotNativeAddonLoaded/);
-  assert.match(source, /vscode\.authentication\.getSession/);
+  assert.match(source, /auth\.getSession/);
   assert.match(source, /createIfNone: false/);
   assert.match(source, /vscode\.lm\.selectChatModels\(\{ vendor: 'copilot' \}\)/);
   assert.match(source, /model\.sendRequest/);
