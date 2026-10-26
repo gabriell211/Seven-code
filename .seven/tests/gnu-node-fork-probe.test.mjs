@@ -27,7 +27,7 @@ test('fork child refuses a direct invocation without actual IPC channel', () => 
 
 test('Android preflight accepts actual GNU IPC before launching Code OSS and not merely Node --version', async () => {
     const { readFileSync } = await import('node:fs');
-    const root = new URL('../../..', import.meta.url);
+    const root = new URL('../../', import.meta.url);
     const activity = readFileSync(new URL('mobile/android/app/src/main/java/dev/seven/code/SevenLocalCodeOssServer.kt', root), 'utf8');
     const runtime = readFileSync(new URL('mobile/android/app/src/main/java/dev/seven/code/SevenLocalGnuRuntime.kt', root), 'utf8');
     const bundler = readFileSync(new URL('.seven/package-android-gnu-experiment.mjs', root), 'utf8');
