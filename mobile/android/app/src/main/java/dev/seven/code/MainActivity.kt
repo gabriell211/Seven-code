@@ -202,11 +202,35 @@ class MainActivity : Activity() {
                 "\n\nEste aplicativo usa somente o Code OSS incluído no APK."
             textSize = 17f
         })
+        // No PC/ADB required: the account owner can share a strictly
+        // allowlisted device-side boot report. Never copy raw Node logs or
+        // session tokens into the Android clipboard.
+        if (localServer?.hasBundle() == true) {
+            layout.addView(Button(this).apply {
+                text = "Copiar diagnóstico GNU Node"
+                contentDescription = "Copiar diagnóstico GNU Node sem dados privados"
+                setOnClickListener {
+                    val summary = localServer?.safeRuntimeDiagnostic()
+                        ?: "GNU Node: diagnóstico indisponível"
+                    val clipboard = getSystemService(Context.CLIPBOARD_SERVICE)
+                        as android.content.ClipboardManager
+                    clipboard.setPrimaryClip(
+                        android.content.ClipData.newPlainText("Seven Code GNU Node", summary)
+                    )
+                    android.widget.Toast.makeText(
+                        this@MainActivity, "Diagnóstico técnico copiado",
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                }
+            })
+        }
         layout.addView(Button(this).apply {
             text = "Tentar abrir o editor novamente"
             setOnClickListener { startLocalWorkbench() }
         })
-        setContentView(layout)
+        setContentView(android.widget.ScrollView(this).apply {
+            addView(layout)
+        })
     }
 
     // Keep the internal entrypoint used by existing Android instrumentation
