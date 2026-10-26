@@ -62,7 +62,7 @@ function render({ trusted }) {
         postMessage() {}
     }
     const menus = [];
-    const MenuId = { AccountsContext: 'AccountsContext', EditorTitle: 'EditorTitle', ChatTitleBarMenu: 'ChatTitleBarMenu', SCMTitle: 'SCMTitle' };
+    const MenuId = { AccountsContext: 'AccountsContext', EditorTitle: 'EditorTitle', ChatTitleBarMenu: 'ChatTitleBarMenu', SCMTitle: 'SCMTitle', TerminalNewDropdownContext: 'TerminalNewDropdownContext' };
     const MenuRegistry = {
         appendMenuItem(id, item) {
             const entry = { id, item, disposed: false };
@@ -128,7 +128,9 @@ test('real Android Accounts and Editor ellipsis menus expose actionable commands
         ['ChatTitleBarMenu', 'sevenCode.githubSignIn'],
         ['ChatTitleBarMenu', 'sevenCode.copilotStatus'],
         ['ChatTitleBarMenu', 'sevenCode.githubSessionStatus'],
-        ['SCMTitle', 'sevenCode.androidGitStatus']
+        ['SCMTitle', 'sevenCode.androidGitStatus'],
+        ['TerminalNewDropdownContext', 'sevenCode.openAndroidTerminal'],
+        ['EditorTitle', 'sevenCode.openAndroidTerminal']
     ]);
     assert.equal(app.document.touchClass, 'seven-mobile-android');
     app.listeners.get('pagehide')();
