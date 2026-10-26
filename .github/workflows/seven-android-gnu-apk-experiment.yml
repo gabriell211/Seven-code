@@ -1,19 +1,9 @@
 name: Seven Code Android - experimental isolated GNU ARM64 single APK
 
+# Start ONLY after the matching Code OSS + GNU closure research succeeds.
+# A direct push can precede both artifact-producing workflows and must never
+# race against a missing/old ARM64 binary.
 on:
-  push:
-    branches: [main]
-    paths:
-      - "mobile/android/app/src/main/**"
-      - "mobile/android/terminal/**"
-      - "mobile/android/app/build.gradle.kts"
-      - ".seven/package-android-gnu-experiment.mjs"
-      - ".seven/android/gnu-node-fork-probe.cjs"
-      - ".github/workflows/seven-android-gnu-apk-experiment.yml"
-      - ".github/workflows/seven-android-gnu-device-e2e.yml"
-      - "mobile/android/app/src/androidTest/java/dev/seven/code/SevenStandaloneGnuDeviceTest.kt"
-      - ".seven/android/run-gnu-apk-e2e.sh"
-      - ".seven/android/verify-gnu-apk.py"
   workflow_run:
     workflows: ["Seven Code Android - research isolated GNU ARM64 Copilot process"]
     types: [completed]
@@ -25,13 +15,10 @@ permissions:
 jobs:
   gnu-android-experiment:
     if: >-
-      github.event_name == 'push' ||
-      (
-        github.event_name == 'workflow_run' &&
-        github.event.workflow_run.conclusion == 'success' &&
-        github.event.workflow_run.head_branch == 'main' &&
-        github.event.workflow_run.head_repository.full_name == github.repository
-      )
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     name: Assemble ONE local Code OSS + Copilot GNU Android experiment (NOT release)
@@ -73,33 +60,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if [[ "${{ github.event_name }}" == workflow_run ]]; then
-            run_id="${{ github.event.workflow_run.id }}"
-            source_sha="${{ github.event.workflow_run.head_sha }}"
-          else
-            run_id=""
-            source_sha=""
-            while read -r candidate_id candidate_sha; do
-              [[ "$candidate_sha" =~ ^[0-9a-f]{40}$ ]] || continue
-              git fetch --no-tags --depth=1 origin "$candidate_sha"
-              if git diff --quiet "$candidate_sha" HEAD -- \
-                src extensions remote build product.json \
-                package.json package-lock.json .nvmrc \
-                .seven/android/build-isolated-gnu-runtime.py \
-                .github/workflows/seven-android-codeoss-arm64.yml; then
-                run_id="$candidate_id"
-                source_sha="$candidate_sha"
-                break
-              fi
-            done < <(
-              gh api "repos/$GITHUB_REPOSITORY/actions/workflows/seven-android-glibc-process-probe.yml/runs?branch=main&status=success&per_page=25" \
-                --jq '.workflow_runs[] | "\(.id) \(.head_sha)"'
-            )
-            test -n "$run_id" || {
-              echo "::error::No passing ORIGINAL GNU ARM64 research build with identical Code OSS source."
-              exit 1
-            }
-          fi
+          # The upstream workflow_run itself is the only valid closure source.
+          # No stale artifact fallback and no race with freshly pushed Code OSS.
+          run_id="${{ github.event.workflow_run.id }}"
+          source_sha="${{ github.event.workflow_run.head_sha }}"
+          [[ "$run_id" =~ ^[0-9]+$ && "$source_sha" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "::error::Invalid completed GNU research workflow identity"
+            exit 1
+          }
           echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
           echo "source_sha=$source_sha" >> "$GITHUB_OUTPUT"
           echo "Pinned original GNU ARM64 research to run $run_id commit $source_sha"
