@@ -22,6 +22,10 @@ test('Only a genuine Node workspace extension host can create Android Node accep
 });
 test('real Copilot response is available as manual Node-only acceptance, never simulated', () => {
   assert.ok(manifest.activationEvents.includes('onCommand:sevenCode.nodeCopilotLiveAcceptance'));
+  assert.ok(manifest.activationEvents.includes('onCommand:sevenCode.nodeCopilotAgentAcceptance'));
+  assert.ok(manifest.contributes.commands.some(c => c.command === 'sevenCode.nodeCopilotAgentAcceptance'));
+  assert.match(source, /workbench\.action\.chat\.open/);
+  assert.match(source, /SEVEN_CODE_AGENT_REAL_OK/);
   assert.ok(manifest.contributes.commands.some(c => c.command === 'sevenCode.nodeCopilotLiveAcceptance'));
   assert.match(source, /verifyCopilotModelOnAndroid/);
   assert.match(source, /SEVEN_ANDROID_NODE_PROOF_DIR/);
