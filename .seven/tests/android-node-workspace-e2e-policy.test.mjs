@@ -20,6 +20,20 @@ test('Only a genuine Node workspace extension host can create Android Node accep
   assert.match(android, /put\("SEVEN_ANDROID_NODE_PROOF_DIR", context\.filesDir\.absolutePath\)/);
   assert.match(workflow, /cp extensions\/seven-code-node-runtime-smoke\/package\.json/);
 });
+test('real Copilot response is available as manual Node-only acceptance, never simulated', () => {
+  assert.ok(manifest.activationEvents.includes('onCommand:sevenCode.nodeCopilotLiveAcceptance'));
+  assert.ok(manifest.contributes.commands.some(c => c.command === 'sevenCode.nodeCopilotLiveAcceptance'));
+  assert.match(source, /verifyCopilotModelOnAndroid/);
+  assert.match(source, /SEVEN_ANDROID_NODE_PROOF_DIR/);
+  assert.match(source, /copilotNativeAddonLoaded/);
+  assert.match(source, /vscode\.authentication\.getSession/);
+  assert.match(source, /createIfNone: false/);
+  assert.match(source, /vscode\.lm\.selectChatModels\(\{ vendor: 'copilot' \}\)/);
+  assert.match(source, /model\.sendRequest/);
+  assert.match(source, /for await \(const part of response\.text\)/);
+  assert.doesNotMatch(source, /mockCopilotReply|fakeCopilotAnswer|FAKE_COPILOT/i);
+});
+
 test('physical Android GNU acceptance cannot be faked by Web-only editor or Linux ARM64 CI', () => {
   assert.match(device, /seven-code-node-runtime-proof\.json/);
   assert.match(device, /testStartedAt/);
