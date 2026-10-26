@@ -205,7 +205,7 @@ class MainActivity : Activity() {
         // No PC/ADB required: the account owner can share a strictly
         // allowlisted device-side boot report. Never copy raw Node logs or
         // session tokens into the Android clipboard.
-        if (localServer?.hasBundle() == true) {
+        if (localServer?.hasGnuResearchRuntime() == true) {
             layout.addView(Button(this).apply {
                 text = "Copiar diagnóstico GNU Node"
                 contentDescription = "Copiar diagnóstico GNU Node sem dados privados"
