@@ -26,7 +26,8 @@
     "onCommand:sevenCode.newAndroidFolder",
     "onCommand:sevenCode.githubSessionStatus",
     "onCommand:sevenCode.androidGitStatus",
-    "onCommand:sevenCode.configureAndroidAiFeatures"
+    "onCommand:sevenCode.configureAndroidAiFeatures",
+    "onCommand:sevenCode.openAndroidTerminal"
   ],
   "capabilities": {
     "virtualWorkspaces": true,
@@ -106,6 +107,11 @@
       {
         "command": "sevenCode.configureAndroidAiFeatures",
         "title": "Seven Code: Ativar IA no Android (verificar GitHub e Copilot)",
+        "category": "Seven Code"
+      },
+      {
+        "command": "sevenCode.openAndroidTerminal",
+        "title": "Seven Code: Abrir terminal Android",
         "category": "Seven Code"
       }
     ],
@@ -203,6 +209,15 @@
         },
         {
           "command": "sevenCode.configureAndroidAiFeatures"
+        },
+        {
+          "command": "sevenCode.openAndroidTerminal"
+        }
+      ],
+      "menubar/terminal": [
+        {
+          "command": "sevenCode.openAndroidTerminal",
+          "group": "1_create@1"
         }
       ]
     }
