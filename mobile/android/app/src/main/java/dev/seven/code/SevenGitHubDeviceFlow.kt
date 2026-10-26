@@ -23,7 +23,15 @@ internal class SevenGitHubDeviceFlow(
         var nextPollAt: Long,
         var intervalSeconds: Int
     )
-    private var pending: Pending? = null
+    // Separate simultaneous login attempts: the Copilot extension and the
+    // Accounts menu may request different GitHub sessions concurrently.
+    // A single pending slot previously invalidated the first approved code.
+    private val pending = LinkedHashMap<String, Pending>()
+    private val maxPendingGrants = 4
+
+    private fun pruneExpired(now: Long) {
+        pending.entries.removeAll { it.value.expiresAt <= now }
+    }
     private val clientIdPattern = Regex("[A-Za-z0-9]{16,64}")
     private val codePattern = Regex("[A-Za-z0-9_-]{20,256}")
     private val scopePattern = Regex("[A-Za-z0-9 ,:_-]{0,300}")
@@ -55,6 +63,10 @@ internal class SevenGitHubDeviceFlow(
 
     private fun begin(clientId: String, scope: String): JSONObject {
         require(scopePattern.matches(scope))
+        pruneExpired(SystemClock.elapsedRealtime())
+        if (pending.size >= maxPendingGrants) {
+            return JSONObject().put("error", "too_many_pending_device_grants")
+        }
         val form = "client_id=" + enc(clientId) + "&scope=" + enc(scope)
         val result = JSONObject(transport("/login/device/code", form))
         if (result.has("error")) return result
@@ -65,16 +77,16 @@ internal class SevenGitHubDeviceFlow(
         require(codePattern.matches(deviceCode) && verify == "https://github.com/login/device" &&
             interval in 1..120 && expiresIn in 1..1800)
         val now = SystemClock.elapsedRealtime()
-        pending = Pending(clientId, deviceCode, now + expiresIn * 1000L,
+        pending[deviceCode] = Pending(clientId, deviceCode, now + expiresIn * 1000L,
             now + interval * 1000L, interval)
         return result
     }
 
     private fun poll(clientId: String, deviceCode: String): JSONObject {
-        val current = pending ?: return JSONObject().put("error", "invalid_device_code")
+        val current = pending[deviceCode] ?: return JSONObject().put("error", "invalid_device_code")
         val now = SystemClock.elapsedRealtime()
         if (now > current.expiresAt) {
-            pending = null
+            pending.remove(deviceCode)
             return JSONObject().put("error", "expired_token")
         }
         require(codePattern.matches(deviceCode))
@@ -96,8 +108,8 @@ internal class SevenGitHubDeviceFlow(
                 current.nextPollAt = now + current.intervalSeconds * 1000L
                 result.put("interval", current.intervalSeconds)
             }
-            "expired_token", "access_denied", "incorrect_device_code" -> pending = null
-            "" -> if (result.optString("access_token").isNotEmpty()) pending = null
+            "expired_token", "access_denied", "incorrect_device_code" -> pending.remove(deviceCode)
+            "" -> if (result.optString("access_token").isNotEmpty()) pending.remove(deviceCode)
         }
         return result
     }
