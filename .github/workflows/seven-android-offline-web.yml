@@ -12,6 +12,7 @@ on:
       - ".seven/android/localize-codeoss-web.mjs"
       - ".seven/tests/android-localization.test.mjs"
       - ".seven/tests/android-system-ime.test.mjs"
+      - ".seven/tests/android-screen-resume-ai.test.mjs"
       - "extensions/copilot/**"
       - ".seven/tests/android-copilot-chat-command.test.mjs"
       - "extensions/github-authentication/**"
@@ -19,6 +20,9 @@ on:
       - ".seven/tests/android-copilot-chat-command.test.mjs"
       - "extensions/seven-code-mobile-terminal/**"
       - "src/vs/workbench/browser/sevenMobileTerminalBridge.ts"
+      - "src/vs/workbench/browser/media/sevenMobileAndroid.css"
+      - "src/vs/workbench/contrib/chat/browser/chatStatus/chatStatusDashboard.ts"
+      - "mobile/android/app/src/androidTest/java/dev/seven/code/SevenOfflineWebWorkbenchDeviceTest.kt"
       - ".seven/verify-android-web.mjs"
       - ".seven/tests/android-web-bundle.test.mjs"
       - "mobile/android/app/src/main/**"
@@ -34,6 +38,9 @@ on:
       - ".seven/tests/android-copilot-chat-command.test.mjs"
       - "extensions/seven-code-mobile-terminal/**"
       - "src/vs/workbench/browser/sevenMobileTerminalBridge.ts"
+      - "src/vs/workbench/browser/media/sevenMobileAndroid.css"
+      - "src/vs/workbench/contrib/chat/browser/chatStatus/chatStatusDashboard.ts"
+      - "mobile/android/app/src/androidTest/java/dev/seven/code/SevenOfflineWebWorkbenchDeviceTest.kt"
       - ".github/workflows/seven-android-offline-web.yml"
       - ".seven/package-android-web.mjs"
       - ".seven/tests/android-preview-install.test.mjs"
@@ -41,6 +48,7 @@ on:
       - ".seven/android/localize-codeoss-web.mjs"
       - ".seven/tests/android-localization.test.mjs"
       - ".seven/tests/android-system-ime.test.mjs"
+      - ".seven/tests/android-screen-resume-ai.test.mjs"
       - ".seven/verify-android-web.mjs"
       - ".seven/tests/android-web-bundle.test.mjs"
       - "mobile/android/app/src/main/**"
@@ -125,7 +133,7 @@ jobs:
           mkdir -p mobile/android/app/src/main/assets/seven-web/licenses
           cp "$RUNNER_TEMP/seven-code-pt-br-LICENSE.md" \
             mobile/android/app/src/main/assets/seven-web/licenses/vscode-loc-LICENSE.md
-          node --test .seven/tests/android-preview-install.test.mjs .seven/tests/android-web-bundle.test.mjs .seven/tests/android-localization.test.mjs .seven/tests/android-system-ime.test.mjs .seven/tests/android-copilot-chat-command.test.mjs .seven/tests/android-copilot-shell-tool.test.mjs .seven/tests/android-github-device-auth.test.mjs
+          node --test .seven/tests/android-screen-resume-ai.test.mjs .seven/tests/android-preview-install.test.mjs .seven/tests/android-web-bundle.test.mjs .seven/tests/android-localization.test.mjs .seven/tests/android-system-ime.test.mjs .seven/tests/android-copilot-chat-command.test.mjs .seven/tests/android-copilot-shell-tool.test.mjs .seven/tests/android-github-device-auth.test.mjs
           test -s mobile/android/app/src/main/assets/seven-web/out/vs/workbench/workbench.web.main.internal.js
           test -s mobile/android/app/src/main/assets/seven-web/extensions/copilot-chat/dist/web.js
       - name: Build APK with Android native PTY and embedded Code OSS Web UI
