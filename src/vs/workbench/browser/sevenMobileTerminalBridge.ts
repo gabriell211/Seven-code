@@ -47,6 +47,14 @@ if (host && typeof BroadcastChannel !== 'undefined') {
             command: { id: 'sevenCode.newAndroidFile', title: 'Novo arquivo no celular' },
             group: 'navigation@51'
         }),
+        MenuRegistry.appendMenuItem(MenuId.EditorTitle, {
+            command: { id: 'workbench.action.files.save', title: 'Salvar arquivo' },
+            group: 'navigation@52'
+        }),
+        MenuRegistry.appendMenuItem(MenuId.EditorTitle, {
+            command: { id: 'workbench.action.showCommands', title: 'Todos os comandos' },
+            group: 'navigation@53'
+        }),
         // Chat title ellipsis: a working authentication action and an honest
         // diagnostic when the official Copilot Node host is unavailable.
         MenuRegistry.appendMenuItem(MenuId.ChatTitleBarMenu, {
