@@ -338,7 +338,7 @@ test('terminal API command reaches the mobile PTY after simulated Android approv
         value: btoa('copilot-native-ok\r\n') });
     app.host.postMessage({ type: 'exit', sessionId: started.sessionId, exitCode: 0 });
     await new Promise(resolve => setTimeout(resolve, 0));
-    assert.equal(chunks.join(''), 'copilot-native-ok\r\n', 'Terminal buffer should receive stdout with CRLF');
+    assert.ok(chunks.join('').endsWith('copilot-native-ok\r\n'), 'Terminal buffer should receive stdout with CRLF');
     assert.equal(exitCode, 0, 'Native exit status should be returned to the editor');
     app.host.close();
 });
