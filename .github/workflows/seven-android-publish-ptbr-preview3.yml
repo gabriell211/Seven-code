@@ -1,0 +1,137 @@
+name: Seven Code Android - publish verified pt-BR isolated Preview 3 APK
+
+# Explicit TEST preview only. Do not bypass GNU ARM64 / live Copilot production gates.
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/seven-android-publish-ptbr-preview3.yml"
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: seven-code-ptbr-preview-publish
+  cancel-in-progress: false
+
+jobs:
+  publish-verified-android-web-preview:
+    name: Verify identical built tree and publish exactly one Android test APK
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Verify main source equals emulator-tested PR tree and CI succeeded
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: e8e5626d77096b66c6a79f9cbea0ee67790234ad
+          VERIFIED_HEAD_SHA: 4279b75f1f6e35c90394cf5fe37f498d28129e93
+          VERIFIED_RUN_ID: "40248977139"
+          RELEASE_TAG: v0.2.0-android-web-preview.3
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$(git rev-parse HEAD^)" = "$SOURCE_SHA" || {
+            echo "::error::The publish workflow must be immediately after the exact tested merge commit"; exit 1;
+          }
+          test "$(gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq '.commit.sha')" = "$GITHUB_SHA" || {
+            echo "::error::Main moved; reject stale release"; exit 1;
+          }
+          test "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$VERIFIED_RUN_ID" --jq '.head_sha')" = "$VERIFIED_HEAD_SHA"
+          test "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$VERIFIED_RUN_ID" --jq '.conclusion')" = "success"
+          test "$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$VERIFIED_RUN_ID" --jq '.event')" = "pull_request"
+          test "$(gh api "repos/$GITHUB_REPOSITORY/git/commits/$SOURCE_SHA" --jq '.tree.sha')" = "$(gh api "repos/$GITHUB_REPOSITORY/git/commits/$VERIFIED_HEAD_SHA" --jq '.tree.sha')" || {
+            echo "::error::Merge has different source tree from emulator-qualified APK"; exit 1;
+          }
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::Preview tag already exists; never overwrite a published APK"; exit 1;
+          fi
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: SevenCode-Android-Web-offline-emulator-verified
+          run-id: 40248977139
+          github-token: ${{ github.token }}
+          path: input-artifact
+
+      - name: Verify exactly one standalone original Code OSS APK, locale and checksum
+        run: |
+          set -euo pipefail
+          test "$(find input-artifact -maxdepth 1 -type f -name '*.apk' | wc -l)" -eq 1
+          (cd input-artifact && sha256sum -c SHA256SUMS.txt)
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          import zipfile
+          apk, = Path("input-artifact").glob("*.apk")
+          assert apk.stat().st_size > 50_000_000, "Refusing thin APK"
+          with zipfile.ZipFile(apk) as z:
+              assert z.testzip() is None, "APK CRC invalid"
+              names = set(z.namelist())
+              required = {
+                  "assets/seven-web/index.html",
+                  "assets/seven-web/bootstrap.js",
+                  "assets/seven-web/out/nls.messages.js",
+                  "assets/seven-web/out/vs/workbench/workbench.web.main.internal.js",
+                  "assets/seven-web/extensions/github-authentication/dist/browser/extension.js",
+                  "assets/seven-web/extensions/copilot-chat/dist/web.js",
+                  "assets/seven-web/extensions/seven-code-mobile-terminal/dist/browser/extension.js",
+                  "assets/seven-web/licenses/vscode-loc-LICENSE.md",
+                  "lib/arm64-v8a/libsevenpty.so",
+              }
+              assert required <= names, f"Missing components: {required - names}"
+              meta = json.loads(z.read("assets/seven-web/bundle.json"))
+              assert meta["kind"] == "original-code-oss-standalone-web"
+              assert meta.get("uiLanguage") == "pt-br"
+              assert meta["uiTranslations"]["translated"] >= 500
+              assert meta.get("remoteNodeExtensions") is False
+              core = z.read("assets/seven-web/out/vs/workbench/workbench.web.main.internal.js")
+              assert b"keyboard-request" in core
+              assert b"sevenCode.githubSignIn" in core
+              assert b"sevenCode.openAndroidFolder" in core
+              assert b"sevenCode.copilotStatus" in core
+              nls = z.read("assets/seven-web/out/nls.messages.js")
+              assert b'_VSCODE_NLS_LANGUAGE = "pt-br"' in nls
+              print("Verified original Code OSS Android APK, pt-BR, native keyboard bridge and actionable menu commands")
+          PY
+          mkdir -p release-assets
+          cp input-artifact/SevenCode-Android-Web-offline-tested-debug.apk release-assets/SevenCode-v0.2.0-android-web-preview.3-debug.apk
+          (cd release-assets && sha256sum *.apk > SHA256SUMS.txt && sha256sum -c SHA256SUMS.txt)
+          test "$(find release-assets -maxdepth 1 -type f -name '*.apk' | wc -l)" -eq 1
+          # Refuse to publish if someone recompressed or changed the tested APK.
+          test "$(sha256sum input-artifact/SevenCode-Android-Web-offline-tested-debug.apk | cut -d' ' -f1)" = "$(sha256sum release-assets/SevenCode-v0.2.0-android-web-preview.3-debug.apk | cut -d' ' -f1)"
+
+      - name: Publish test-only GitHub prerelease (NOT production)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: e8e5626d77096b66c6a79f9cbea0ee67790234ad
+          RELEASE_TAG: v0.2.0-android-web-preview.3
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/notes.md" <<'NOTES'
+          ## Seven Code Preview 3 — TESTE Android (instalação independente)
+
+          **Corrige a falha de instalação causada pela tentativa de atualizar builds debug com assinaturas diferentes.** Esta prévia possui ID Android exclusivo `dev.seven.code.preview` e nome **Seven Code Preview**. Ela instala ao lado do Seven Code anterior (`dev.seven.code`) e não modifica seu pacote nem seus dados.
+
+          **Homologação:** emulador Android API 35 instalou APK público antigo e Preview 3 lado a lado, abriu o Code OSS Web, completou testes instrumentados, preservou o pacote antigo e confirmou a instalação e abertura após o ciclo de teste. Estrutura do APK, assinatura digital, traduções pt-BR e componentes Copilot/GitHub Web conferidos.
+
+          **Pendente em dispositivos físicos:** instalação neste Xiaomi, OAuth com conta real, Copilot Chat/Agent com respostas oficiais, execução irrestrita de extensões Node.js e runtime GNU ARM64 completo. APK debug apenas para testes.
+
+          **Não precisa desinstalar o Seven Code antigo.** Projetos e configurações ficam separados. Um próximo APK de testes assinado por outro runner pode novamente exigir identificação de pacote diferente até configurarmos uma chave de assinatura persistente. Nenhum token de autenticação está embutido.
+
+          CI e APK idêntico: https://github.com/gabriell211/Seven-code/actions/runs/40248977139
+          Fonte validada: https://github.com/gabriell211/Seven-code/commit/4279b75f1f6e35c90394cf5fe37f498d28129e93
+          Merge na main: https://github.com/gabriell211/Seven-code/commit/e8e5626d77096b66c6a79f9cbea0ee67790234ad
+          NOTES
+          test "$(gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq '.commit.sha')" = "$GITHUB_SHA"
+          ! gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1
+          gh release create "$RELEASE_TAG" release-assets/*.apk release-assets/SHA256SUMS.txt \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$SOURCE_SHA" \
+            --title "Seven Code Android Web Preview 3 — pt-BR + menu/login (teste)" \
+            --notes-file "$RUNNER_TEMP/notes.md" \
+            --prerelease --latest=false
