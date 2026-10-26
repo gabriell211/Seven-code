@@ -24,18 +24,18 @@ test('GNU-style loader wrapper and process.execPath override preserve child fork
     try {
         const wrapper = join(dir, 'node-wrapper.sh');
         const bootstrap = join(dir, 'bootstrap.cjs');
-        writeFileSync(wrapper, '#!/bin/sh\\nexec ' + JSON.stringify(process.execPath) + ' "$@"\\n');
+        writeFileSync(wrapper, '#!/bin/sh\nexec ' + JSON.stringify(process.execPath) + ' "$@"\n');
         chmodSync(wrapper, 0o700);
         writeFileSync(bootstrap,
             'Object.defineProperty(process, "execPath", {configurable:true, writable:true, value:' +
-            JSON.stringify(wrapper) + '});\\n');
+            JSON.stringify(wrapper) + '});\n');
         const result = spawnSync(process.execPath, [script], {
             encoding: 'utf8',
             timeout: 12000,
             env: { ...process.env, NODE_OPTIONS: '--require=' + bootstrap }
         });
         assert.equal(result.status, 0, result.stderr || result.error?.message);
-        assert.match(result.stdout, /^SEVEN_GNU_FORK_IPC_OK\\s*$/);
+        assert.match(result.stdout, /^SEVEN_GNU_FORK_IPC_OK\s*$/);
     } finally {
         rmSync(dir, { recursive: true, force: true });
     }
