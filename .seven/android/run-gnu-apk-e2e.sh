@@ -17,6 +17,10 @@ if [[ "$abi" != *arm64-v8a* ]]; then
 fi
 adb shell df -h /data
 app="$RUNNER_TEMP/experimental-apk/SevenCode-gnu-arm64-EXPERIMENTAL-debug.apk"
+# The package ID must be isolated so a CI/debug test cannot replace
+# the user's existing Seven Code app and delete or downgrade private data.
+"$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$app" |
+  grep -F "package: name='dev.seven.code.gnu'"
 test -s "$app"
 test -s mobile/android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
 # Both APKs originate from different CI runners. A separate instrumentation
@@ -63,18 +67,18 @@ diagnose_android_codeoss_failure() {
   if [[ "$status" -ne 0 ]]; then
     echo "::error::Real Code OSS Android acceptance failed (exit $status)."
     echo "Verified local Code OSS last startup phase:"
-    adb shell run-as dev.seven.code cat files/seven-code-oss-local/startup-phase.txt 2>/dev/null || true
+    adb shell run-as dev.seven.code.gnu cat files/seven-code-oss-local/startup-phase.txt 2>/dev/null || true
     echo "Android GNU Node child_process.fork IPC preflight (redacted):"
-    adb shell run-as dev.seven.code cat files/seven-code-oss-local/gnu-node-fork-probe.log 2>/dev/null |
+    adb shell run-as dev.seven.code.gnu cat files/seven-code-oss-local/gnu-node-fork-probe.log 2>/dev/null |
       sed -E 's/[[:xdigit:]]{64}/[redacted-local-token]/g' |
       head -n 25 || true
     echo "GNU loader/Node version probe and Android primary ABI (no tokens):"
-    adb shell run-as dev.seven.code cat files/seven-code-oss-local/gnu-platform-probe.txt 2>/dev/null | head -n 4 || true
-    adb shell run-as dev.seven.code cat files/seven-code-oss-local/gnu-node-version-probe.log 2>/dev/null |
+    adb shell run-as dev.seven.code.gnu cat files/seven-code-oss-local/gnu-platform-probe.txt 2>/dev/null | head -n 4 || true
+    adb shell run-as dev.seven.code.gnu cat files/seven-code-oss-local/gnu-node-version-probe.log 2>/dev/null |
       sed -E 's/[[:xdigit:]]{64}/[redacted-local-token]/g' |
       head -n 25 || true
     echo "Original Code OSS server log (local auth token redacted):"
-    adb shell run-as dev.seven.code cat files/seven-code-oss-local/server.log 2>/dev/null |
+    adb shell run-as dev.seven.code.gnu cat files/seven-code-oss-local/server.log 2>/dev/null |
       sed -E 's/[[:xdigit:]]{64}/[redacted-local-token]/g' |
       tail -n 55 || true
     echo "Android native crash buffer (local tokens redacted):"
@@ -87,7 +91,7 @@ diagnose_android_codeoss_failure() {
       sed -E 's/[[:xdigit:]]{64}/[redacted-local-token]/g' |
       tail -n 80 || true
     echo "Android recorded process exits:"
-    adb shell dumpsys activity exit-info dev.seven.code 2>/dev/null |
+    adb shell dumpsys activity exit-info dev.seven.code.gnu 2>/dev/null |
       sed -E 's/[[:xdigit:]]{64}/[redacted-local-token]/g' |
       grep -Ei 'dev\.seven\.code|reason|status|signal|description' |
       tail -n 70 || true
@@ -98,8 +102,8 @@ trap diagnose_android_codeoss_failure EXIT
 # Test the editor delivered by the *single original 300+ MB APK*, not a fake
 # remote browser or a standalone .html test fixture. Keep the result in CI.
 adb shell am instrument -w -r \
-  -e class dev.seven.code.SevenStandaloneGnuDeviceTest \
-  dev.seven.code.test/androidx.test.runner.AndroidJUnitRunner \
+  -e class dev.seven.code.gnu.SevenStandaloneGnuDeviceTest \
+  dev.seven.code.gnu.test/androidx.test.runner.AndroidJUnitRunner \
   | tee "$RUNNER_TEMP/gnu-android-instrumentation.txt"
 grep -Fq 'OK (1 test)' "$RUNNER_TEMP/gnu-android-instrumentation.txt"
 grep -Fq 'INSTRUMENTATION_CODE: -1' "$RUNNER_TEMP/gnu-android-instrumentation.txt"
