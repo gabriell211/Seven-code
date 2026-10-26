@@ -82,6 +82,8 @@ test('Android GNU failure screen allows safe no-ADB diagnosis without leaking Gi
   const activity = readFileSync('mobile/android/app/src/main/java/dev/seven/code/MainActivity.kt', 'utf8');
   const server = readFileSync('mobile/android/app/src/main/java/dev/seven/code/SevenLocalCodeOssServer.kt', 'utf8');
   assert.match(activity, /Copiar diagnóstico GNU Node/);
+  assert.match(activity, /localServer\?\.hasGnuResearchRuntime\(\) == true/);
+  assert.match(server, /fun hasGnuResearchRuntime\(\): Boolean/);
   assert.match(activity, /safeRuntimeDiagnostic\(\)/);
   assert.match(activity, /ClipboardManager/);
   assert.match(activity, /ScrollView/);
