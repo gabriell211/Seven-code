@@ -9,6 +9,11 @@ on:
       # host, native addons, or runtime provenance must rebuild from source.
       - ".github/workflows/seven-android-codeoss-arm64.yml"
       - ".seven/android/**"
+      # GNU packaging/workflow changes must enter the same ordered build
+      # chain as source and Android runtime changes, never a racing APK push.
+      - ".seven/package-android-gnu-experiment.mjs"
+      - ".github/workflows/seven-android-gnu-apk-experiment.yml"
+      - ".github/workflows/seven-android-gnu-device-e2e.yml"
       - ".seven/package-android-local-runtime.mjs"
       - ".seven/verify-standalone-apk.py"
       - "mobile/android/**"

@@ -86,3 +86,17 @@ test('Android acceptance and release eligibility cannot be faked by a GNU resear
     assert.throws(() => validateGnuBundle(o.server, o.closure), /Never relabel GNU staging/);
   } finally { rmSync(o.root, { recursive: true, force: true }); }
 });
+
+test('GNU APK waits for matching native ARM64 closure instead of racing direct main pushes', () => {
+  const workflow = readFileSync('.github/workflows/seven-android-gnu-apk-experiment.yml', 'utf8');
+  const compiler = readFileSync('.github/workflows/seven-android-codeoss-arm64.yml', 'utf8');
+  const header = workflow.split('permissions:')[0];
+  assert.match(header, /workflow_run:/);
+  assert.match(header, /Seven Code Android - research isolated GNU ARM64 Copilot process/);
+  assert.doesNotMatch(header, /^  push:/m, 'direct push races creation of the exact compiler artifact');
+  assert.match(workflow, /github.event.workflow_run.conclusion == 'success'/);
+  assert.match(workflow, /run_id="\$\{\{ github.event.workflow_run.id \}\}"/);
+  assert.match(workflow, /source_sha="\$\{\{ github.event.workflow_run.head_sha \}\}"/);
+  assert.match(compiler, /\.seven\/package-android-gnu-experiment\.mjs/);
+  assert.match(compiler, /seven-android-gnu-apk-experiment\.yml/);
+});

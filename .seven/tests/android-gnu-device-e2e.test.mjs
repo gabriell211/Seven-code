@@ -65,5 +65,12 @@ test('end-to-end emulator checks wait for successful complete APK and do not rac
   assert.doesNotMatch(workflow.split('permissions:')[0], /\\n  push:/);
   assert.ok(workflow.includes("github.event.workflow_run.conclusion == 'success'"));
   assert.ok(workflow.includes('run-id: ${{ steps.apk_source.outputs.run_id }}'));
-  assert.ok(readFileSync('.github/workflows/seven-android-gnu-apk-experiment.yml', 'utf8').includes('.seven/android/run-gnu-apk-e2e.sh'));
+  const upstream = readFileSync('.github/workflows/seven-android-codeoss-arm64.yml', 'utf8');
+  const assembler = readFileSync('.github/workflows/seven-android-gnu-apk-experiment.yml', 'utf8');
+  // The GNU APK now starts only from the compiled/provenanced ARM64 chain.
+  // Changes in Android proof scripts must restart that upstream chain.
+  assert.ok(upstream.includes('".seven/android/**"'));
+  assert.ok(assembler.includes('workflow_run:'));
+  assert.ok(readFileSync('.github/workflows/seven-android-gnu-device-e2e.yml', 'utf8')
+    .includes('script: bash .seven/android/run-gnu-apk-e2e.sh'));
 });
