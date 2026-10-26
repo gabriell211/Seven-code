@@ -78,6 +78,27 @@ test('GNU device diagnostic installs as an isolated APK without replacing Seven 
   assert.match(testScript, /gnu-node-version-probe\.log/);
 });
 
+test('Android GNU failure screen allows safe no-ADB diagnosis without leaking GitHub auth', () => {
+  const activity = readFileSync('mobile/android/app/src/main/java/dev/seven/code/MainActivity.kt', 'utf8');
+  const server = readFileSync('mobile/android/app/src/main/java/dev/seven/code/SevenLocalCodeOssServer.kt', 'utf8');
+  assert.match(activity, /Copiar diagnóstico GNU Node/);
+  assert.match(activity, /localServer\?\.hasGnuResearchRuntime\(\) == true/);
+  assert.match(server, /fun hasGnuResearchRuntime\(\): Boolean/);
+  assert.match(activity, /safeRuntimeDiagnostic\(\)/);
+  assert.match(activity, /ClipboardManager/);
+  assert.match(activity, /ScrollView/);
+  assert.match(server, /fun safeRuntimeDiagnostic\(\): String/);
+  assert.match(server, /gnu-node-version-probe\.log/);
+  assert.match(server, /gnu-node-fork-probe\.log/);
+  assert.match(server, /SEVEN_GNU_FORK_IPC_OK/);
+  assert.match(server, /evidence\.lastModified\(\) >= attemptTime/);
+  assert.match(server, /file\.lastModified\(\) < attemptTime/);
+  assert.match(server, /File\(root, "boot-attempt\.txt"\)\.writeText/);
+  assert.match(server, /Chat\/Agent autenticados: não testados/);
+  const snippet = server.split('fun safeRuntimeDiagnostic()')[1].split('/** Presence is not proof')[0];
+  assert.doesNotMatch(snippet, /appendLine\(.*(?:token|password|cookie|prompt)/i);
+});
+
 test('native GNU startup records failure evidence before claiming Node success', () => {
   const runtime = readFileSync('mobile/android/app/src/main/java/dev/seven/code/SevenLocalGnuRuntime.kt', 'utf8');
   const server = readFileSync('mobile/android/app/src/main/java/dev/seven/code/SevenLocalCodeOssServer.kt', 'utf8');

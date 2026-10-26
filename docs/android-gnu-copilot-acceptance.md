@@ -11,6 +11,16 @@ This is an **experimental**, local-first GNU/Linux ARM64 runtime in a separate A
 
 **Important:** x86_64 Android translation has previously rejected GNU Node with `SIGSYS / SYS_SECCOMP` (host syscall 273). A native ARM64 emulator on an ordinary GitHub-hosted macOS runner also failed to boot with `HV_UNSUPPORTED`. Neither is proof of running on a physical ARM64 phone. Use the real-device gate below.
 
+## Testar diretamente no Android, sem computador
+
+O workflow **experimental isolated GNU ARM64 single APK** publica o artefato `SevenCode-gnu-Android-arm64-EXPERIMENTAL-debug-only` após montar e verificar o APK. Pelo GitHub Actions, abra o run bem-sucedido, baixe o **artifact ZIP**, extraia o arquivo `SevenCode-gnu-arm64-EXPERIMENTAL-debug.apk` e instale-o no telefone ARM64.
+
+Ele aparece como **Seven Code GNU Test** e usa `dev.seven.code.gnu`, separado do Seven Code regular. É uma construção experimental, com `targetSdk=28`, não um APK apto a publicação. Uma instalação existente do GNU Test com assinatura diferente pode precisar de uma estratégia de atualização própria; **não remova o Seven Code regular nem seus dados**.
+
+Se o processo GNU falhar, a tela do próprio aplicativo agora oferece **Copiar diagnóstico GNU Node**. Cole esse resumo no chamado ou conversa de homologação. O relatório mostra exclusivamente ABI, API Android, fase/erro de startup, versão do Node quando observada e provas reais de IPC/addon da **inicialização atual**. Ele não inclui tokens GitHub, mensagens de Copilot nem saídas completas do terminal.
+
+Se aparecer somente a interface Web do Code OSS sem iniciar o Node local, **não** considere o runtime GNU validado; o teste completo exige o servidor autenticado em `127.0.0.1` e as provas de processo Node/IPC.
+
 ## Physical Android ARM64 acceptance
 
 Use a **dedicated test phone**. The experimental signed debug APK uses its own application ID `dev.seven.code.gnu` (shown as **Seven Code GNU Test**) and `targetSdk=28` solely for research. It installs beside the real Seven Code without overwriting its files or GitHub sessions. Do not confuse this debug-only variant with a production app.
