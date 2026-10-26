@@ -37,7 +37,18 @@ gradle -p mobile/android :app:connectedDebugAndroidTest \
   -PsevenPreviewIsolated=true \
   -Pandroid.testInstrumentationRunnerArguments.class=dev.seven.code.SevenOfflineWebWorkbenchDeviceTest
 
-# Test 4: instrumentation did not uninstall or corrupt the original app.
+# Test 4: Android Gradle Plugin may uninstall the target preview APK
+# after connectedDebugAndroidTest as part of test cleanup. This is expected,
+# not an installer failure. Original Seven Code must survive that cleanup.
+adb shell pm path dev.seven.code | grep '^package:' || {
+  echo "::error::Original Seven Code disappeared during Android tests"; exit 1;
+}
+# Restore only the isolated preview APK with the same verified bytes, then
+# prove both package IDs coexist and launch the isolated application.
+adb install -r "$new_apk"
+adb shell pm path dev.seven.code.preview | grep '^package:'
+adb shell pm path dev.seven.code | grep '^package:'
+adb shell am start -W -n dev.seven.code.preview/dev.seven.code.MainActivity
 adb shell pm path dev.seven.code.preview | grep '^package:'
 adb shell pm path dev.seven.code | grep '^package:'
 echo "SEVEN_PREVIEW_SIDE_BY_SIDE_INSTALL_E2E_OK"
