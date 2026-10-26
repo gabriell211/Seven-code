@@ -43,6 +43,9 @@ function render({ trusted }) {
     const listeners = new Map();
     const document = {
         activeElement: null,
+        documentElement: {
+            classList: { add(name) { document.touchClass = name; }, remove(name) { if (document.touchClass === name) document.touchClass = null; } }
+        },
         addEventListener(name, callback) { listeners.set(name, callback); },
         removeEventListener(name, callback) {
             if (listeners.get(name) === callback) listeners.delete(name);
@@ -59,7 +62,7 @@ function render({ trusted }) {
         postMessage() {}
     }
     const menus = [];
-    const MenuId = { AccountsContext: 'AccountsContext', EditorTitle: 'EditorTitle', ChatTitleBarMenu: 'ChatTitleBarMenu' };
+    const MenuId = { AccountsContext: 'AccountsContext', EditorTitle: 'EditorTitle', ChatTitleBarMenu: 'ChatTitleBarMenu', SCMTitle: 'SCMTitle' };
     const MenuRegistry = {
         appendMenuItem(id, item) {
             const entry = { id, item, disposed: false };
@@ -117,13 +120,31 @@ test('real Android Accounts and Editor ellipsis menus expose actionable commands
     const app = render({ trusted: true });
     assert.deepEqual(app.menus.map(menu => [menu.id, menu.item.command.id]), [
         ['AccountsContext', 'sevenCode.githubSignIn'],
+        ['AccountsContext', 'sevenCode.githubSessionStatus'],
         ['EditorTitle', 'sevenCode.openAndroidFolder'],
         ['EditorTitle', 'sevenCode.newAndroidFile'],
+        ['EditorTitle', 'workbench.action.files.save'],
+        ['EditorTitle', 'workbench.action.showCommands'],
         ['ChatTitleBarMenu', 'sevenCode.githubSignIn'],
-        ['ChatTitleBarMenu', 'sevenCode.copilotStatus']
+        ['ChatTitleBarMenu', 'sevenCode.copilotStatus'],
+        ['ChatTitleBarMenu', 'sevenCode.githubSessionStatus'],
+        ['SCMTitle', 'sevenCode.androidGitStatus']
     ]);
+    assert.equal(app.document.touchClass, 'seven-mobile-android');
     app.listeners.get('pagehide')();
     assert.ok(app.menus.every(menu => menu.disposed));
+    assert.equal(app.document.touchClass, null);
+});
+
+test('Android touch menus advertise native actions without synthetic desktop key events', () => {
+    const css = readFileSync('src/vs/workbench/browser/media/sevenMobileAndroid.css', 'utf8');
+    const main = readFileSync('src/vs/workbench/workbench.web.main.ts', 'utf8');
+    assert.match(css, /@media \(pointer: coarse\) and \(hover: none\)/);
+    assert.match(css, /html\.seven-mobile-android/);
+    assert.match(css, /\.monaco-keybinding/);
+    assert.match(main, /sevenMobileAndroid\.css/);
+    const web = render({ trusted: false });
+    assert.notEqual(web.document.touchClass, 'seven-mobile-android');
 });
 
 test('pagehide unregisters IME listeners and native channels', () => {
