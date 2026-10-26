@@ -143,7 +143,7 @@ jobs:
           unzip -Z1 "$apk" | grep -Fx 'assets/seven-local/gnu-manifest.json'
           unzip -Z1 "$apk" | grep -Fx 'lib/arm64-v8a/libseven-gnu-loader.so'
           unzip -Z1 "$apk" | grep -Fx 'lib/arm64-v8a/libseven-gnu-node.so'
-          node .seven/verify-android-apk.mjs
+          node .seven/verify-android-apk.mjs "$apk" --gnu-experimental
           mkdir -p "$RUNNER_TEMP/experiment"
           cp "$apk" "$RUNNER_TEMP/experiment/SevenCode-gnu-arm64-EXPERIMENTAL-debug.apk"
           echo "ONE experimental APK built. This is not production ready, not E2E accepted and MUST NOT be a GitHub release."
