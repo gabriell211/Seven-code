@@ -473,7 +473,7 @@ class SevenOfflineWebWorkbenchDeviceTest {
             }
             assertTrue("Android native PTY never returned a ready event after consent", ready)
             val encoded = android.util.Base64.encodeToString(
-                "echo SEVEN_ANDROID_PTY_E2E_OK\\n".toByteArray(Charsets.UTF_8),
+                "echo SEVEN_ANDROID_PTY_E2E_OK\n".toByteArray(Charsets.UTF_8),
                 android.util.Base64.NO_WRAP)
             scenario.onActivity { activity ->
                 val web = activity.findViewById<android.view.ViewGroup>(android.R.id.content)
