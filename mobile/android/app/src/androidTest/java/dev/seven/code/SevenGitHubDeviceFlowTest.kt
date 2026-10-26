@@ -57,6 +57,58 @@ class SevenGitHubDeviceFlowTest {
         assertEquals(2, calls.size)
     }
 
+    @Test fun simultaneousDeviceAuthorizationsCannotInvalidateEachOther() {
+        val firstCode = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        val secondCode = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        var begins = 0
+        val polls = mutableListOf<String>()
+        val flow = SevenGitHubDeviceFlow { path, form ->
+            if (path == "/login/device/code") {
+                val code = if (++begins == 1) firstCode else secondCode
+                JSONObject().put("device_code", code)
+                    .put("user_code", "ABCD-EFGH")
+                    .put("verification_uri", "https://github.com/login/device")
+                    .put("interval", 1).put("expires_in", 900).toString()
+            } else {
+                polls.add(form)
+                val code = if (form.contains(firstCode)) "TOKEN_FIRST" else "TOKEN_SECOND"
+                JSONObject().put("access_token", code).put("token_type", "bearer").toString()
+            }
+        }
+        assertEquals(firstCode, flow.process(request("begin"))
+            .getJSONObject("body").getString("device_code"))
+        assertEquals(secondCode, flow.process(request("begin"))
+            .getJSONObject("body").getString("device_code"))
+        Thread.sleep(1150)
+        assertEquals("TOKEN_FIRST", flow.process(request("poll", firstCode))
+            .getJSONObject("body").getString("access_token"))
+        assertEquals("TOKEN_SECOND", flow.process(request("poll", secondCode))
+            .getJSONObject("body").getString("access_token"))
+        assertEquals(2, polls.size)
+        assertEquals("invalid_device_code", flow.process(request("poll", firstCode))
+            .getJSONObject("body").getString("error"))
+        assertEquals("invalid_device_code", flow.process(request("poll", secondCode))
+            .getJSONObject("body").getString("error"))
+    }
+
+    @Test fun nativeLoginLimitsConcurrentUnapprovedDeviceGrants() {
+        var count = 0
+        val flow = SevenGitHubDeviceFlow { _, _ ->
+            count++
+            JSONObject().put("device_code", count.toString().padStart(40, '0'))
+                .put("user_code", "ABCD-EFGH")
+                .put("verification_uri", "https://github.com/login/device")
+                .put("interval", 1).put("expires_in", 900).toString()
+        }
+        repeat(4) {
+            assertEquals(40, flow.process(request("begin"))
+                .getJSONObject("body").getString("device_code").length)
+        }
+        assertEquals("too_many_pending_device_grants", flow.process(request("begin"))
+            .getJSONObject("body").getString("error"))
+        assertEquals(4, count)
+    }
+
     @Test fun rejectsUnexpectedOperationsAndNeverLeaksTransportExceptions() {
         val flow = SevenGitHubDeviceFlow { _, _ -> throw Exception("SECRET_INTERNAL_TRANSPORT") }
         val unsupported = flow.process(request("delete"))
