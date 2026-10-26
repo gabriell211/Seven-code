@@ -89,7 +89,9 @@ test('Android GNU failure screen allows safe no-ADB diagnosis without leaking Gi
   assert.match(server, /gnu-node-version-probe\.log/);
   assert.match(server, /gnu-node-fork-probe\.log/);
   assert.match(server, /SEVEN_GNU_FORK_IPC_OK/);
-  assert.match(server, /evidence\.lastModified\(\) >= currentBoot\.lastModified\(\)/);
+  assert.match(server, /evidence\.lastModified\(\) >= attemptTime/);
+  assert.match(server, /file\.lastModified\(\) < attemptTime/);
+  assert.match(server, /File\(root, "boot-attempt\.txt"\)\.writeText/);
   assert.match(server, /Chat\/Agent autenticados: não testados/);
   const snippet = server.split('fun safeRuntimeDiagnostic()')[1].split('/** Presence is not proof')[0];
   assert.doesNotMatch(snippet, /appendLine\(.*(?:token|password|cookie|prompt)/i);
