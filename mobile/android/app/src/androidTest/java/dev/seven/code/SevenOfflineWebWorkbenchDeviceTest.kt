@@ -259,8 +259,13 @@ class SevenOfflineWebWorkbenchDeviceTest {
                                 input.id = 'seven-ime-e2e';
                                 input.style.cssText =
                                   'position:fixed;top:calc(50% - 21px);left:calc(50% - 80px);' +
-                                  'width:160px;height:42px;z-index:2147483647;opacity:1';
-                                document.querySelector('.monaco-workbench').append(input);
+                                  'width:160px;height:42px;z-index:2147483647;opacity:1;' +
+                                  'pointer-events:auto;background:#fff;color:#000;border:3px solid #087aca';
+                                // Do not append to .monaco-workbench: it can have
+                                // clipping/stacking contexts above the editor,
+                                // especially after a landscape reflow. A true
+                                // user touch must actually hit this textarea.
+                                document.body.append(input);
                             }
                             return !!input && input.getBoundingClientRect().width > 0;
                         })()"""
@@ -306,13 +311,33 @@ class SevenOfflineWebWorkbenchDeviceTest {
                 SystemClock.sleep(500)
             }
             val focusDiagnostic = AtomicReference("unknown")
+            val focusedInDom = AtomicReference(false)
+            val diagnosticLatch = CountDownLatch(1)
             scenario.onActivity { activity ->
                 val root = activity.findViewById<android.view.ViewGroup>(android.R.id.content)
                 val web = root.getChildAt(0) as? WebView
-                focusDiagnostic.set("nativeFocus=${web?.hasFocus()}, windowFocus=${web?.hasWindowFocus()}")
+                val native = "nativeFocus=${web?.hasFocus()}, windowFocus=${web?.hasWindowFocus()}"
+                if (web == null) {
+                    focusDiagnostic.set(native + ", WebView missing")
+                    diagnosticLatch.countDown()
+                } else {
+                    web.evaluateJavascript(
+                        "document.activeElement?.id === 'seven-ime-e2e'"
+                    ) { js ->
+                        focusedInDom.set(js == "true")
+                        focusDiagnostic.set(native + ", domTextareaFocus=" + js)
+                        diagnosticLatch.countDown()
+                    }
+                }
             }
+            diagnosticLatch.await(5, TimeUnit.SECONDS)
             assertTrue(
-                "Real touch in Code OSS textarea did not open Android IME: " +
+                "Real finger tap never focused the actual Code OSS HTML textarea: " +
+                    focusDiagnostic.get(),
+                focusedInDom.get()
+            )
+            assertTrue(
+                "HTML textarea has real focus but the Android IME is not visible: " +
                     focusDiagnostic.get(),
                 keyboardVisible
             )
