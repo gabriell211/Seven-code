@@ -290,10 +290,10 @@ class SevenOfflineWebWorkbenchDeviceTest {
                     tap.set(Pair(position[0] + web.width / 2, position[1] + web.height / 2))
                 }
             }
-            val target = tap.get()
-            assertTrue("No WebView center available for real user IME tap", target != null)
+            val target = tap.get() ?: throw AssertionError(
+                "No WebView center available for real user IME tap")
             assertTrue("Android could not tap the real editor field",
-                UiDevice.getInstance(instrumentation).click(target!!.first, target.second))
+                UiDevice.getInstance(instrumentation).click(target.first, target.second))
             var keyboardVisible = false
             for (attempt in 0 until 35) {
                 scenario.onActivity { activity ->
